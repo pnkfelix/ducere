@@ -112,11 +112,6 @@ fn yakker() {
 
     assert_eq!(yakker::VarParser::new().parse("x"), Ok(Var('x')));
 
-    assert_eq!(yakker::StrContentParser::new().parse(""), Ok("".to_string()));
-    assert_eq!(yakker::StrContentParser::new().parse(".."), Ok("..".to_string()));
-    assert_eq!(yakker::StrContentParser::new().parse(r#".."#), Ok("..".to_string()));
-    assert_eq!(yakker::StrContentParser::new().parse(r#".\"."#), Ok(".\".".to_string()));
-
     assert_eq!(yakker::ExprParser::new().parse("x"), Ok(Expr::Var(Var('x'))));
     assert_eq!(yakker::ExprParser::new().parse("x"), Ok(Var('x').into()));
     assert_eq!(yakker::ExprParser::new().parse("true"), Ok(true.into()));
@@ -124,7 +119,15 @@ fn yakker() {
     assert_eq!(yakker::ExprParser::new().parse(r#""xx""#), Ok("xx".into()));
     assert_eq!(yakker::ExprParser::new().parse(r#""x""#), Ok("x".into()));
     assert_eq!(yakker::ExprParser::new().parse(r#""""#), Ok("".into()));
-    assert_eq!(yakker::ExprParser::new().parse(r#""\"""#), Ok("\"".into()));
+
+    // XXX for now, I'm going to skip handling escape sequences in strings.
+    // Instead, it will "just" be illegal to have delimiter characters in string literals.
+    // assert_eq!(yakker::ExprParser::new().parse(r#""\"""#), Ok("\"".into()));
+
+    assert_eq!(yakker::RegularRightSideParser::new().parse(r"c"), Ok(RegularRightSide::Term("c".into())));
+    assert_eq!(yakker::NonTermParser::new().parse(r"A"), Ok("A".into()));
+
+    assert_eq!(yakker::RuleParser::new().parse(r"A::=c"), Ok(Rule("A".into(), RegularRightSide::Term("c".into()))));
 }
 
 // Example: Imperative fixed-width integer
