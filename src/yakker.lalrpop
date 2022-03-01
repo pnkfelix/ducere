@@ -1,0 +1,58 @@
+
+use crate::expr::{Expr, Var};
+use crate::{Rule, RegularRightSide, NonTerm};
+// use lalrpop_util::ParseError;
+
+grammar;
+
+match {
+  r"[a-c]" => TERM,
+  r"[x-z]" => VAR,
+  r"[A-Z]" => NON_TERM,
+} else {
+  _
+}
+
+pub Rule: Rule = <nt:NON_TERM> "::=" <r:RegularRightSide> => Rule(nt.into(), r);
+
+pub RegularRightSide: RegularRightSide = {
+    "" => RegularRightSide::EmptyString,
+    "empty" => RegularRightSide::EmptyLanguage,
+    <t:TERM> => RegularRightSide::Term(t.into()),
+    <x:Var> ":=" <a:NonTerm> "(" <e:Expr> ")" =>
+            RegularRightSide::NonTerm { x, A: a, e },
+    <x:Var> ":=" <e:Expr> =>
+            RegularRightSide::Binding { x, e },
+};
+
+pub Var: Var = <s:VAR> => Var(s.chars().next().unwrap());
+pub NonTerm: NonTerm = <s:NON_TERM> => NonTerm(format!("{}", s.chars().next().unwrap()));
+
+pub Expr: Expr = {
+    <v:Var> => Expr::Var(v),
+    "true"  => true.into(),
+    "false" => false.into(),
+    "()"    => ().into(),
+    "\"" <s:StrContent> "\"" => s.into(),
+};
+
+// This is very very bad efficiency wise. Quadratic time blowup because
+// it may create the O(n) length string O(n) times, depending on how
+// little greed is exhibited in the StrPrefix parsing.
+pub StrContent: String = {
+    ()              => "".to_string(),
+    <s1:StrPrefix> <s2:StrContent> => { let mut s = s1.to_string(); s.push_str(&s2); s },
+};
+
+// Ugly trick: just having special rules for variables floating around
+// makes the lexer treatment of string content ambiguous. The right
+// way to do this is to make a custom lexer that directly handles
+// string literals, but instead of that, I am going to allow the
+// lexer to go ahead and treat variables specially, and then turn
+// them *back into* string contents when we hit them within strings
+pub StrPrefix: &'input str = {
+    <s1:VAR> => s1,
+    <s1:NON_TERM> => s1,
+    <s1:r#"[^\\"]+"#> => s1,
+    "\\\"" => "\""
+}
