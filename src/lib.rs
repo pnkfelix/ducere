@@ -106,6 +106,32 @@ pub mod expr {
 
 lalrpop_mod!(pub yakker); // synthesized by LALRPOP
 
+#[derive(PartialEq, Debug)]
+pub enum YakkerError {
+    NoCharAfterBackslash,
+    UnrecognizedChar(char),
+}
+
+fn normalize_escapes(input: &str) -> Result<String, YakkerError> {
+    let mut s = String::with_capacity(input.len());
+    let mut cs = input.chars();
+    while let Some(c) = cs.next() {
+        if c == '\\' {
+            match cs.next() {
+                None => return Err(YakkerError::NoCharAfterBackslash),
+                Some(c @ '\\') | Some(c @ '"') => { s.push(c); continue }
+                Some('n') => { s.push('\n'); continue }
+                Some('t') => { s.push('\t'); continue }
+                Some('r') => { s.push('\r'); continue }
+                Some(c) => return Err(YakkerError::UnrecognizedChar(c)),
+           }
+        } else {
+            s.push(c);
+        }
+    }
+    return Ok(s);
+}
+
 #[test]
 fn yakker() {
     use expr::{Expr, Var};
@@ -120,9 +146,8 @@ fn yakker() {
     assert_eq!(yakker::ExprParser::new().parse(r#""x""#), Ok("x".into()));
     assert_eq!(yakker::ExprParser::new().parse(r#""""#), Ok("".into()));
 
-    // XXX for now, I'm going to skip handling escape sequences in strings.
-    // Instead, it will "just" be illegal to have delimiter characters in string literals.
-    // assert_eq!(yakker::ExprParser::new().parse(r#""\"""#), Ok("\"".into()));
+    assert_eq!(yakker::ExprParser::new().parse(r#""\"""#), Ok("\"".into()));
+    assert_eq!(yakker::ExprParser::new().parse(r#""\n""#), Ok("\n".into()));
 
     assert_eq!(yakker::RegularRightSideParser::new().parse(r"c"), Ok(RegularRightSide::Term("c".into())));
     assert_eq!(yakker::NonTermParser::new().parse(r"A"), Ok("A".into()));

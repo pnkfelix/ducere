@@ -1,9 +1,13 @@
 
 use crate::expr::{Expr, Var};
-use crate::{Rule, RegularRightSide, NonTerm};
-// use lalrpop_util::ParseError;
+use crate::{Rule, RegularRightSide, NonTerm, normalize_escapes, YakkerError};
+use lalrpop_util::ParseError;
 
 grammar;
+
+extern {
+    type Error = YakkerError;
+}
 
 match {
   r"[a-c]" => TERM,
@@ -33,5 +37,8 @@ pub Expr: Expr = {
     "true"  => true.into(),
     "false" => false.into(),
     "()"    => ().into(),
-    <s:r#""[^"]*""#> => s[1..s.len()-1].into(),
+    <s:r#""(\\"|[^"])*""#> =>?
+        normalize_escapes(&s[1..s.len()-1])
+            .map(|s|s.into())
+            .map_err(|e| ParseError::User { error: e }),
 };
