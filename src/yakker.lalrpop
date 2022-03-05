@@ -1,5 +1,5 @@
 
-use crate::expr::{Expr, Var};
+use crate::expr::{Expr, Var, BinOp};
 use crate::{Grammar, Rule, RegularRightSide, NonTerm, normalize_escapes, YakkerError};
 use lalrpop_util::ParseError;
 
@@ -22,7 +22,12 @@ pub Grammar: Grammar = {
         Grammar { rules: Some(r).into_iter().chain(g.rules.into_iter()).collect() }
 };
 
-pub Rule: Rule = <nt:NonTerm> "::=" <r:RegularRightSide> => Rule(nt.into(), r);
+pub Rule: Rule = <nt:ParametricNonTerm> "::=" <r:RegularRightSide> => Rule(nt.0.into(), nt.1, r);
+
+pub ParametricNonTerm: (NonTerm, Option<Var>) = {
+    <nt:NonTerm> "(" <v:Var> ")" => (nt, Some(v)),
+    <nt:NonTerm> => (nt, None),
+};
 
 pub RightSideLeaf: RegularRightSide = {
     "(" <RegularRightSide> ")" => <>,
@@ -31,7 +36,7 @@ pub RightSideLeaf: RegularRightSide = {
     <t:r"'\w'"> => RegularRightSide::Term(t[1..t.len()-1].into()),
     <x:Var> ":=" <a:NonTerm> "(" <e:Expr> ")" =>
             RegularRightSide::NonTerm { x: Some(x), A: a, e: Some(e) },
-    <x:Var> ":=" <e:Expr> =>
+    "{" <x:Var> ":=" <e:Expr> "}" =>
             RegularRightSide::Binding { x, e },
     "[" <e:Expr> "]" =>
         RegularRightSide::Constraint(e),
@@ -67,16 +72,44 @@ pub Concatenant: RegularRightSide = {
     <RightSideLeaf> "*" => RegularRightSide::Kleene(Box::new(<>)),
 };
 
-pub Var: Var = <s:r"[a-z][a-z]*"> => Var(s.chars().next().unwrap());
-pub NonTerm: NonTerm = <s:r"[A-Z][a-z]*"> => NonTerm(format!("{}", s.chars().next().unwrap()));
+pub Var: Var = <s:r"[a-z_][a-zA-Z_0-9]*"> => Var(s.to_string());
+pub NonTerm: NonTerm = <s:r"[A-Z][a-zA-Z_0-9]*"> => NonTerm(format!("{}", s.chars().next().unwrap()));
 
-pub Expr: Expr = {
+pub Expr: Expr = CmpExpr;
+
+pub CmpExpr: Expr = {
+    <e:AddSeq> => e,
+    <e1:AddSeq> "==" <e2:AddSeq> => Expr::BinOp(BinOp::Eql, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "!=" <e2:AddSeq> => Expr::BinOp(BinOp::Neq, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> ">" <e2:AddSeq> => Expr::BinOp(BinOp::Gt, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> ">=" <e2:AddSeq> => Expr::BinOp(BinOp::Ge, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "<" <e2:AddSeq> => Expr::BinOp(BinOp::Lt, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "<=" <e2:AddSeq> => Expr::BinOp(BinOp::Le, Box::new(e1), Box::new(e2)),
+}
+
+pub AddSeq: Expr = {
+    <e:AddArg> => e,
+    <e1:AddSeq> "+" <e2:AddArg> => Expr::BinOp(BinOp::Add, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "-" <e2:AddArg> => Expr::BinOp(BinOp::Sub, Box::new(e1), Box::new(e2)),
+};
+
+pub AddArg: Expr = MulSeq;
+
+pub MulSeq: Expr = {
+    <e:MulArg> => e,
+    <e1:MulSeq> "*" <e2:MulArg> => Expr::BinOp(BinOp::Mul, Box::new(e1), Box::new(e2)),
+    <e1:MulSeq> "/" <e2:MulArg> => Expr::BinOp(BinOp::Div, Box::new(e1), Box::new(e2)),
+};
+
+pub MulArg: Expr = {
     <v:Var> => Expr::Var(v),
     "true"  => true.into(),
     "false" => false.into(),
+    <n:r"[1-9][0-9]*|0"> => Expr::Lit(n.parse::<i64>().unwrap().into()),
     "()"    => ().into(),
+    "(" <e:Expr> ")"    => e,
     <s:STRING_LIT> =>?
         normalize_escapes(&s[1..s.len()-1])
             .map(|s|s.into())
             .map_err(|e| ParseError::User { error: e }),
-};
+}

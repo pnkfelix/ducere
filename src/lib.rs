@@ -29,7 +29,7 @@ impl std::fmt::Debug for Blackbox {
 pub struct Grammar { pub rules: Vec<Rule> }
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct Rule(NonTerm, RegularRightSide);
+pub struct Rule(NonTerm, Option<expr::Var>, RegularRightSide);
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum RegularRightSide {
@@ -49,13 +49,57 @@ pub enum RegularRightSide {
 
 pub mod expr {
     #[derive(PartialEq, Eq, Clone, Debug)]
-    pub struct Var(pub char);
+    pub enum BinOp { Add, Sub, Mul, Div, Gt, Ge, Lt, Le, Eql, Neq }
+    
+    #[derive(PartialEq, Eq, Clone, Debug)]
+    pub struct Var(pub String);
 
     #[derive(PartialEq, Eq, Clone, Debug)]
-    pub enum Expr { Var(Var), Lit(Val) }
+    pub enum Expr { Var(Var), Lit(Val), BinOp(BinOp, Box<Expr>, Box<Expr>) }
 
-    #[derive(PartialEq, Eq, Clone, Debug)]
-    pub enum Val { Bool(bool), Unit, String(String) }
+    #[derive(PartialOrd, Ord, PartialEq, Eq, Clone, Debug)]
+    pub enum Val { Bool(bool), Unit, String(String), Int(i64), }
+
+    impl std::ops::Add<Val> for Val {
+        type Output = Val;
+        fn add(self, rhs: Val) -> Self {
+            match (self, rhs) {
+                (Val::Int(lhs), Val::Int(rhs)) => Val::Int(lhs + rhs),
+                (Val::String(mut lhs), Val::String(rhs)) => { lhs.push_str(&rhs); Val::String(lhs) }
+                (lhs, rhs) => { panic!("invalid inputs for Add: {:?} and {:?}", lhs, rhs); }
+            }
+        }
+    }
+
+    impl std::ops::Sub<Val> for Val {
+        type Output = Val;
+        fn sub(self, rhs: Val) -> Self {
+            match (self, rhs) {
+                (Val::Int(lhs), Val::Int(rhs)) => Val::Int(lhs - rhs),
+                (lhs, rhs) => { panic!("invalid inputs for Sub: {:?} and {:?}", lhs, rhs); }
+            }
+        }
+    }
+
+    impl std::ops::Mul<Val> for Val {
+        type Output = Val;
+        fn mul(self, rhs: Val) -> Self {
+            match (self, rhs) {
+                (Val::Int(lhs), Val::Int(rhs)) => Val::Int(lhs * rhs),
+                (lhs, rhs) => { panic!("invalid inputs for Sub: {:?} and {:?}", lhs, rhs); }
+            }
+        }
+    }
+
+    impl std::ops::Div<Val> for Val {
+        type Output = Val;
+        fn div(self, rhs: Val) -> Self {
+            match (self, rhs) {
+                (Val::Int(lhs), Val::Int(rhs)) => Val::Int(lhs / rhs),
+                (lhs, rhs) => { panic!("invalid inputs for Sub: {:?} and {:?}", lhs, rhs); }
+            }
+        }
+    }
 
     #[derive(Clone, Debug)]
     pub struct Env(Vec<(Var, Val)>);
@@ -84,14 +128,34 @@ pub mod expr {
     }
 
     impl Expr {
-        pub fn eval(&self, env: Env) -> Val {
+        pub fn eval(&self, env: &Env) -> Val {
             match self {
                 Expr::Var(x) => env.lookup(x).unwrap().clone(),
                 Expr::Lit(v) => v.clone(),
+                Expr::BinOp(op, e1, e2) => {
+                    let lhs = e1.eval(env);
+                    let rhs = e2.eval(env);
+                    match op {
+                        BinOp::Add => lhs + rhs,
+                        BinOp::Sub => lhs - rhs,
+                        BinOp::Mul => lhs * rhs,
+                        BinOp::Div => lhs / rhs,
+                        BinOp::Gt => Val::Bool(lhs > rhs),
+                        BinOp::Ge => Val::Bool(lhs >= rhs),
+                        BinOp::Lt => Val::Bool(lhs < rhs),
+                        BinOp::Le => Val::Bool(lhs <= rhs),
+                        BinOp::Eql => Val::Bool(lhs == rhs), 
+                        BinOp::Neq => Val::Bool(lhs != rhs),
+                   }
+                }
             }
         }
     }
 
+    impl From<char> for Var { fn from(c: char) -> Var { Var(c.to_string()) } }
+    impl From<&str> for Var { fn from(c: &str) -> Var { Var(c.to_string()) } }
+    impl From<String> for Var { fn from(c: String) -> Var { Var(c) } }
+    
     impl From<Var> for Expr { fn from(x: Var) -> Expr { Expr::Var(x) } }
     impl From<Val> for Expr { fn from(v: Val) -> Expr { Expr::Lit(v) } }
 
@@ -99,6 +163,7 @@ pub mod expr {
     impl From<()> for Val { fn from((): ()) -> Val { Val::Unit } }
     impl From<String> for Val { fn from(s: String) -> Val { Val::String(s) } }
     impl From<&str> for Val { fn from(s: &str) -> Val { Val::String(s.to_string()) } }
+    impl From<i64> for Val { fn from(n: i64) -> Val { Val::Int(n) } }
 
     impl From<bool> for Expr { fn from(b: bool) -> Expr { let v: Val = b.into(); v.into() } }
     impl From<()> for Expr { fn from((): ()) -> Expr { let v: Val = ().into(); v.into() } }
@@ -139,10 +204,10 @@ fn normalize_escapes(input: &str) -> Result<String, YakkerError> {
 fn yakker() {
     use expr::{Expr, Var};
 
-    assert_eq!(yakker::VarParser::new().parse("x"), Ok(Var('x')));
+    assert_eq!(yakker::VarParser::new().parse("x"), Ok('x'.into()));
 
-    assert_eq!(yakker::ExprParser::new().parse("x"), Ok(Expr::Var(Var('x'))));
-    assert_eq!(yakker::ExprParser::new().parse("x"), Ok(Var('x').into()));
+    assert_eq!(yakker::ExprParser::new().parse("x"), Ok(Expr::Var('x'.into())));
+    assert_eq!(yakker::ExprParser::new().parse("x"), Ok(Expr::Var('x'.into())));
     assert_eq!(yakker::ExprParser::new().parse("true"), Ok(true.into()));
     assert_eq!(yakker::ExprParser::new().parse(r#""..""#), Ok("..".into()));
     assert_eq!(yakker::ExprParser::new().parse(r#""xx""#), Ok("xx".into()));
@@ -155,11 +220,11 @@ fn yakker() {
     assert_eq!(yakker::RegularRightSideParser::new().parse(r"'c'"), Ok(RegularRightSide::Term("c".into())));
     assert_eq!(yakker::NonTermParser::new().parse(r"A"), Ok("A".into()));
 
-    assert_eq!(yakker::RuleParser::new().parse(r"A::='c'"), Ok(Rule("A".into(), RegularRightSide::Term("c".into()))));
+    assert_eq!(yakker::RuleParser::new().parse(r"A::='c'"), Ok(Rule("A".into(), None, RegularRightSide::Term("c".into()))));
 
-    assert_eq!(yakker::GrammarParser::new().parse(r"A::='c'"), Ok(Grammar { rules: vec![Rule("A".into(), RegularRightSide::Term("c".into()))]}));
-    assert_eq!(yakker::GrammarParser::new().parse(r"A::='a' B::='b'"), Ok(Grammar { rules: vec![Rule("A".into(), RegularRightSide::Term("a".into())),
-    Rule("B".into(), RegularRightSide::Term("b".into()))]}));
+    assert_eq!(yakker::GrammarParser::new().parse(r"A::='c'"), Ok(Grammar { rules: vec![Rule("A".into(), None, RegularRightSide::Term("c".into()))]}));
+    assert_eq!(yakker::GrammarParser::new().parse(r"A::='a' B::='b'"), Ok(Grammar { rules: vec![Rule("A".into(), None, RegularRightSide::Term("a".into())),
+    Rule("B".into(), None, RegularRightSide::Term("b".into()))]}));
 }
 
 // Example: Imperative fixed-width integer
@@ -186,8 +251,8 @@ fn imperative_fixed_width_integer() {
     assert_matches!(yakker::RuleParser::new().parse("Int ::= '0' "), Ok(_));
     assert_matches!(yakker::RuleParser::new().parse("Int ::= ( ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') )* "), Ok(_));
 
-    // Not ready yet.
-    // assert_matches!(yakker::RuleParser::new().parse("Int ::= { n:=yyy } ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n=0]"), Ok(_));
+    assert_matches!(yakker::RuleParser::new().parse("Int ::= { n:=y_0 } ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0]"), Ok(_));
+    assert_matches!(yakker::RuleParser::new().parse("Int(n) ::= ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0]"), Ok(_));
 }
 
 // Example: Functional fixed-width integer
@@ -269,14 +334,14 @@ fn imperative_fixed_width_integer() {
 pub struct Term(String);
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct NonTerm(String);
-#[derive(PartialEq, Eq, Clone)]
-pub struct Var(String);
+// #[derive(PartialEq, Eq, Clone, Debug)]
+// pub struct Var(String);
 #[derive(PartialEq, Eq, Clone)]
 pub struct Val(String);
 
 // notation from paper: `{x := v }`
 #[derive(PartialEq, Eq, Clone)]
-pub struct Binding(Var, Val);
+pub struct Binding(expr::Var, Val);
 
 // notation from paper: `< w >`
 #[derive(PartialEq, Eq, Clone)]
@@ -290,7 +355,7 @@ impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
 // e.g. `x:A(v)< T' >`
 // e.g. `x:A(v) := w`
 
-pub struct Parsed<X> { var: Var, nonterm: NonTerm, input: Val, payload: X }
+pub struct Parsed<X> { var: expr::Var, nonterm: NonTerm, input: Val, payload: X }
 
 pub enum AbstractNode<X> {
     Term(Term),
