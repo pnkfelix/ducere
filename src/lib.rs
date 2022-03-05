@@ -26,6 +26,9 @@ impl std::fmt::Debug for Blackbox {
 }
 
 #[derive(PartialEq, Eq, Debug)]
+pub struct Grammar { pub rules: Vec<Rule> }
+
+#[derive(PartialEq, Eq, Debug)]
 pub struct Rule(NonTerm, RegularRightSide);
 
 #[derive(PartialEq, Eq, Debug)]
@@ -34,7 +37,7 @@ pub enum RegularRightSide {
     EmptyLanguage,
     Term(Term),
     #[allow(non_snake_case)]
-    NonTerm { x: expr::Var, A: NonTerm, e: expr::Expr },
+    NonTerm { x: Option<expr::Var>, A: NonTerm, e: Option<expr::Expr> },
     Binding { x: expr::Var, e: expr::Expr },
     Concat(Box<Self>, Box<Self>),
     Either(Box<Self>, Box<Self>),
@@ -149,15 +152,43 @@ fn yakker() {
     assert_eq!(yakker::ExprParser::new().parse(r#""\"""#), Ok("\"".into()));
     assert_eq!(yakker::ExprParser::new().parse(r#""\n""#), Ok("\n".into()));
 
-    assert_eq!(yakker::RegularRightSideParser::new().parse(r"c"), Ok(RegularRightSide::Term("c".into())));
+    assert_eq!(yakker::RegularRightSideParser::new().parse(r"'c'"), Ok(RegularRightSide::Term("c".into())));
     assert_eq!(yakker::NonTermParser::new().parse(r"A"), Ok("A".into()));
 
-    assert_eq!(yakker::RuleParser::new().parse(r"A::=c"), Ok(Rule("A".into(), RegularRightSide::Term("c".into()))));
+    assert_eq!(yakker::RuleParser::new().parse(r"A::='c'"), Ok(Rule("A".into(), RegularRightSide::Term("c".into()))));
+
+    assert_eq!(yakker::GrammarParser::new().parse(r"A::='c'"), Ok(Grammar { rules: vec![Rule("A".into(), RegularRightSide::Term("c".into()))]}));
+    assert_eq!(yakker::GrammarParser::new().parse(r"A::='a' B::='b'"), Ok(Grammar { rules: vec![Rule("A".into(), RegularRightSide::Term("a".into())),
+    Rule("B".into(), RegularRightSide::Term("b".into()))]}));
 }
 
 // Example: Imperative fixed-width integer
 //
 // int(n) = ([n > 0]( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ) { n:=n-1 })* [n = 0]
+
+#[cfg(test)]
+macro_rules! assert_matches {
+    ($e:expr, $p:pat) => {
+        let v = $e;
+        if let $p = v { } else {
+            panic!("assert fail {:?} does not match pattern {}", v, stringify!($p));
+        }
+    }
+}
+
+#[test]
+fn imperative_fixed_width_integer() {
+    use expr::{Expr, Var};
+
+    assert_matches!(yakker::NonTermParser::new().parse("Int"), Ok(_));
+    assert_matches!(yakker::RegularRightSideParser::new().parse("x:=Int(())"), Ok(_));
+    assert_matches!(yakker::RightSideLeafParser::new().parse("'0'"), Ok(_));
+    assert_matches!(yakker::RuleParser::new().parse("Int ::= '0' "), Ok(_));
+    assert_matches!(yakker::RuleParser::new().parse("Int ::= ( ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') )* "), Ok(_));
+
+    // Not ready yet.
+    // assert_matches!(yakker::RuleParser::new().parse("Int ::= { n:=yyy } ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n=0]"), Ok(_));
+}
 
 // Example: Functional fixed-width integer
 //

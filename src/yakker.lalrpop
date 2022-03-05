@@ -1,43 +1,81 @@
 
 use crate::expr::{Expr, Var};
-use crate::{Rule, RegularRightSide, NonTerm, normalize_escapes, YakkerError};
+use crate::{Grammar, Rule, RegularRightSide, NonTerm, normalize_escapes, YakkerError};
 use lalrpop_util::ParseError;
 
 grammar;
+
+match {
+    r#""(\\"|[^"])*""# => STRING_LIT
+} else {
+    _
+}
 
 extern {
     type Error = YakkerError;
 }
 
-match {
-  r"[a-c]" => TERM,
-  r"[x-z]" => VAR,
-  r"[A-Z]" => NON_TERM,
-} else {
-  _
-}
+pub Grammar: Grammar = {
+    <r:Rule> =>
+        Grammar { rules: Some(r).into_iter().collect() },
+    <r:Rule> <g: Grammar> =>
+        Grammar { rules: Some(r).into_iter().chain(g.rules.into_iter()).collect() }
+};
 
 pub Rule: Rule = <nt:NonTerm> "::=" <r:RegularRightSide> => Rule(nt.into(), r);
 
-pub RegularRightSide: RegularRightSide = {
-    "" => RegularRightSide::EmptyString,
+pub RightSideLeaf: RegularRightSide = {
+    "(" <RegularRightSide> ")" => <>,
+    r#"''"# => RegularRightSide::EmptyString,
     "empty" => RegularRightSide::EmptyLanguage,
-    <t:TERM> => RegularRightSide::Term(t.into()),
+    <t:r"'\w'"> => RegularRightSide::Term(t[1..t.len()-1].into()),
     <x:Var> ":=" <a:NonTerm> "(" <e:Expr> ")" =>
-            RegularRightSide::NonTerm { x, A: a, e },
+            RegularRightSide::NonTerm { x: Some(x), A: a, e: Some(e) },
     <x:Var> ":=" <e:Expr> =>
             RegularRightSide::Binding { x, e },
+    "[" <e:Expr> "]" =>
+        RegularRightSide::Constraint(e),
+//    <b:BlackBox> "(" <e:Expr> ")" =>
+//        RegularRightSide::Blackbox(e)),
 };
 
-pub Var: Var = <s:VAR> => Var(s.chars().next().unwrap());
-pub NonTerm: NonTerm = <s:NON_TERM> => NonTerm(format!("{}", s.chars().next().unwrap()));
+// Of the three recursive cases for regular right sides,
+// concatenation, alternation, and Kleene-closure,
+// Kleene binds most tightly, and alternative most loosely, like so:
+//
+// r1 r2* | r3 r4*
+// is equivalent to:
+// ((r1 (r2*)) | (r3 (r4*)))
+//
+// As noted in its book, LALRPOP does not have any special features for
+// encoding precedence; you just have to structure your grammar in tiers.
+
+pub RegularRightSide: RegularRightSide = Alternates;
+
+pub Alternates: RegularRightSide = {
+    <a:Alternative> => a,
+    <a:Alternative> "|" <alts:Alternates> => RegularRightSide::Either(Box::new(a), Box::new(alts)),
+}
+
+pub Alternative: RegularRightSide = {
+    <r:Concatenant> => r,
+    <r:Concatenant> <rs:Alternative> => RegularRightSide::Concat(Box::new(r), Box::new(rs)),
+};
+
+pub Concatenant: RegularRightSide = {
+    <RightSideLeaf> => <>,
+    <RightSideLeaf> "*" => RegularRightSide::Kleene(Box::new(<>)),
+};
+
+pub Var: Var = <s:r"[a-z][a-z]*"> => Var(s.chars().next().unwrap());
+pub NonTerm: NonTerm = <s:r"[A-Z][a-z]*"> => NonTerm(format!("{}", s.chars().next().unwrap()));
 
 pub Expr: Expr = {
     <v:Var> => Expr::Var(v),
     "true"  => true.into(),
     "false" => false.into(),
     "()"    => ().into(),
-    <s:r#""(\\"|[^"])*""#> =>?
+    <s:STRING_LIT> =>?
         normalize_escapes(&s[1..s.len()-1])
             .map(|s|s.into())
             .map_err(|e| ParseError::User { error: e }),
