@@ -29,7 +29,7 @@ impl std::fmt::Debug for Blackbox {
 pub struct Grammar { pub rules: Vec<Rule> }
 
 impl Grammar {
-    fn empty() -> Self { Grammar { rules: vec![] } }
+    pub fn empty() -> Self { Grammar { rules: vec![] } }
 
     fn rule(&self, nonterm: &NonTerm) -> Option<&Rule> {
         self.rules.iter().find(|r| &r.0 == nonterm)
@@ -69,7 +69,7 @@ impl Grammar {
     //  get. (After all, if you didn't allow for that, and forced the system to
     //  yield every derivation, then that would preclude most optimizations for
     //  the parser.)
-    fn matches(&self, env: &expr::Env, w: &[Term], r: &RegularRightSide) -> Option<expr::Env> {
+    pub fn matches(&self, env: &expr::Env, w: &[Term], r: &RegularRightSide) -> Option<expr::Env> {
         match r {
             // GL-EPS
             RegularRightSide::EmptyString =>
@@ -80,7 +80,7 @@ impl Grammar {
                 },
             // GL-TERM
             RegularRightSide::Term(t) =>
-                if &[t.clone()] == w {
+                if t.matches(w) {
                     Some(expr::Env::empty())
                 } else {
                     None
@@ -122,7 +122,7 @@ impl Grammar {
             }
             // GL-A
             RegularRightSide::NonTerm { x, A, e } => {
-                let Rule(_A, opt_var, subrule) = self.rule(A).unwrap();
+                let Rule(_a, opt_var, subrule) = self.rule(A).unwrap();
                 let subenv = match (e, opt_var) {
                     (None, None) =>
                         // great: non-parameterized terminals don't need values
@@ -138,7 +138,8 @@ impl Grammar {
                     }
                     (None, Some(y_0)) => {
                         panic!("provided expr argument {:?} \
-                                to *unparameterized* non-term {:?}({:?})", e, _A, y_0);
+                                to *unparameterized* non-term {:?}({:?})",
+                               e, _a, y_0);
                     }
                 };
                 let subresult = self.matches(&subenv, w, subrule);
@@ -157,15 +158,21 @@ impl Grammar {
             // this code is forced to try each partition of the strings,
             // (including empty strings!).
             RegularRightSide::Concat(r1, r2) => {
-                for i in 0..w.len() {
+                for i in 0..=w.len() {
+                    println!("`{:?}` in Concat({:?},{:?}) trial i={}",
+                             w, r1, r2, i);
                     let (w1,  w2) = w.split_at(i);
-                    let env1 = if let Some(env1) = self.matches(env, w1, r1) {
+                    let w1_in_r1 = self.matches(env, w1, r1);
+                    println!("w1_in_r1: {:?}", w1_in_r1);
+                    let env1 = if let Some(env1) = w1_in_r1 {
                         env1
                     } else {
                         continue;
                     };
                     let new_env = env.clone().concat(env1.clone());
-                    let env2 = if let Some(env2) = self.matches(&new_env, w2, r2) {
+                    let w2_in_r2 = self.matches(&new_env, w2, r2);
+                    println!("w2_in_r2: {:?}", w2_in_r2);
+                    let env2 = if let Some(env2) = w2_in_r2 {
                         env2
                     } else {
                         continue;
@@ -247,16 +254,12 @@ fn regular_right_sides() {
     fn right_side(s: &str) -> RegularRightSide {
         yakker::RegularRightSideParser::new().parse(s).unwrap()
     }
-    fn input(s: &str) -> [Term; 1] {
-        [s.into()]
+    fn input(s: &str) -> Vec<Term> {
+        s.chars().map(|c| Term::C(c)).collect()
     }
     assert!(g.matches(emp, &input("c"), &right_side(r"'c'")).is_some());
     assert!(g.matches(emp, &input("d"), &right_side(r"'c'")).is_none());
-
-    // XXX the Concat case isn't working, but I'm not sure that's even parsing
-    // right now; there are no tests of it parsing.
-
-    // assert!(g.matches(emp, &input("ab"), &right_side(r"'a''b'")).is_some());
+    assert!(g.matches(emp, &input("ab"), &right_side(r"'a''b'")).is_some());
 }
 
 // given positive target T and positive count N where N <= T, returns iterator
@@ -476,6 +479,10 @@ fn yakker() {
     assert_eq!(yakker::ExprParser::new().parse(r#""\n""#), Ok("\n".into()));
 
     assert_eq!(yakker::RegularRightSideParser::new().parse(r"'c'"), Ok(RegularRightSide::Term("c".into())));
+    assert_eq!(yakker::RegularRightSideParser::new().parse(r"'c''d'"),
+               Ok(RegularRightSide::Concat(Box::new(RegularRightSide::Term("c".into())),
+                                           Box::new(RegularRightSide::Term("d".into()))
+               )));
     assert_eq!(yakker::NonTermParser::new().parse(r"A"), Ok("A".into()));
 
     assert_eq!(yakker::RuleParser::new().parse(r"A::='c'"), Ok(Rule("A".into(), None, RegularRightSide::Term("c".into()))));
@@ -588,6 +595,25 @@ fn imperative_fixed_width_integer() {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Term { C(char), S(String) }
+
+impl Term {
+    fn string(&self) -> String {
+        let mut s = String::new();
+        match self {
+            Term::C(c) => { s.push(*c) }
+            Term::S(s2) => { s = s2.clone(); }
+        }
+        s
+    }
+    fn matches(&self, w: &[Term]) -> bool {
+        let left = self.string();
+        let left = left.chars().fuse();
+        let right: Vec<String> = w.iter().map(|t|t.string()).collect();
+        let right = right.iter().map(|s|s.chars()).flatten();
+        left.eq(right)
+    }
+}
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct NonTerm(String);
 // #[derive(PartialEq, Eq, Clone, Debug)]
