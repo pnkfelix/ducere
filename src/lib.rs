@@ -606,6 +606,9 @@ impl Term {
         s
     }
     fn matches(&self, w: &[Term]) -> bool {
+        if let (&Term::C(c1), &[Term::C(c2)]) = (self, w) {
+            return c1 == c2;
+        }
         let left = self.string();
         let left = left.chars().fuse();
         let right: Vec<String> = w.iter().map(|t|t.string()).collect();
