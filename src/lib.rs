@@ -3,7 +3,7 @@
 pub trait Recognizer {
     type Term;
     type String;
-    fn accept(&self, iter: &dyn Iterator<Item=Self::Term>) -> Option<Self::String>;
+    fn accept(&self, iter: &mut dyn Iterator<Item=&Self::Term>) -> Option<Self::String>;
 }
 
 pub struct Blackbox {
@@ -28,6 +28,14 @@ impl std::fmt::Debug for Blackbox {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Grammar { pub rules: Vec<Rule> }
 
+impl Grammar {
+    fn empty() -> Self { Grammar { rules: vec![] } }
+
+    fn rule(&self, nonterm: &NonTerm) -> Option<&Rule> {
+        self.rules.iter().find(|r| &r.0 == nonterm)
+    }
+}
+
 #[derive(PartialEq, Eq, Debug)]
 pub struct Rule(NonTerm, Option<expr::Var>, RegularRightSide);
 
@@ -43,8 +51,238 @@ pub enum RegularRightSide {
     Either(Box<Self>, Box<Self>),
     Kleene(Box<Self>),
     Constraint(expr::Expr),
-    Blackbox(Blackbox),
+    Blackbox(Blackbox, expr::Expr),
+}
 
+impl Grammar {
+    // This implements the relation
+    // env ⊢ w ∈ r ⇒ Env
+    //
+    // Notes:
+    //
+    //  * the given `w` has to *exactly* match the needs of the rule.
+    //
+    //  * there may be multiple ways for given `w` to match a rule, and that
+    //  means different resulting env. The Yakker paper doesn't say much about
+    //  this; my reading of the theorems, especially of Earley soundness, that
+    //  if different derivations exist, then you don't know which one you will
+    //  get. (After all, if you didn't allow for that, and forced the system to
+    //  yield every derivation, then that would preclude most optimizations for
+    //  the parser.)
+    fn matches(&self, env: &expr::Env, w: &[Term], r: &RegularRightSide) -> Option<expr::Env> {
+        match r {
+            // GL-EPS
+            RegularRightSide::EmptyString =>
+                if w.len() == 0 {
+                    Some(expr::Env::empty())
+                } else {
+                    None
+                },
+            // GL-TERM
+            RegularRightSide::Term(t) =>
+                if &[t.clone()] == w {
+                    Some(expr::Env::empty())
+                } else {
+                    None
+                },
+            // GL-PRED
+            RegularRightSide::Constraint(e) =>
+                if e.eval(env) == expr::TRUE {
+                    Some(expr::Env::empty())
+                } else {
+                    None
+                }
+            // GL-BIND
+            RegularRightSide::Binding { x, e } =>
+                Some(expr::Env::bind(x.clone(), e.eval(env))),
+            // GL-φ
+            RegularRightSide::Blackbox(bb, e) => {
+                let v = e.eval(env);
+                let phi = (bb.from_val)(v);
+                // The BB interface is iterator based; but the spec for GL-φ
+                // implies that the whole string must be matched. We ensure this
+                // by checking that the iterator was exhausted by the blackbox.
+                //
+                // (This is clearly a suboptimal interface overall; i.e. this
+                // system will potentially invoke the same blackbox repeatedly,
+                // when what we *should* do is have a blackbox interface that
+                // allows it to incrementally process more of the input on
+                // demand, and signal recognition on successive prefixes.
+                //
+                // In any case, in general the Iterator spec does not guarantee
+                // that successive calls to `next()` will return `None`; but
+                // calling `fuse()` *will* ensure this.
+                let mut cs = w.iter().fuse();
+                let accepted = phi.accept(&mut cs);
+                if accepted.is_some() && cs.next().is_none() {
+                    Some(expr::Env::empty())
+                } else {
+                    None
+                }
+            }
+            // GL-A
+            RegularRightSide::NonTerm { x, A, e } => {
+                let Rule(_A, opt_var, subrule) = self.rule(A).unwrap();
+                let subenv = match (e, opt_var) {
+                    (None, None) =>
+                        // great: non-parameterized terminals don't need values
+                        expr::Env::empty(),
+                    (Some(e), Some(y_0)) => {
+                        let v = e.eval(env);
+                        expr::Env::bind(y_0.clone(), v)
+                    }
+                    (Some(e), None) => {
+                        // not as great: I'd prefer to not use y_0 formalism.
+                        let v = e.eval(env);
+                        expr::Env::bind(expr::y_0(), v)
+                    }
+                    (None, Some(y_0)) => {
+                        panic!("provided expr argument {:?} \
+                                to *unparameterized* non-term {:?}({:?})", e, _A, y_0);
+                    }
+                };
+                let subresult = self.matches(&subenv, w, subrule);
+                subresult.map(|_discarded_env| {
+                    match x {
+                        Some(x) => expr::Env::bind(x.clone(), w.into()),
+                        None => expr::Env::empty(),
+                    }
+                })
+            }
+            // GL-SEQ
+            //
+            // this is where we *really* see the weakness of the API
+            // being used here: instead of streaming through the input
+            // and having some way to save intermediate results,
+            // this code is forced to try each partition of the strings,
+            // (including empty strings!).
+            RegularRightSide::Concat(r1, r2) => {
+                for i in 0..w.len() {
+                    let (w1,  w2) = w.split_at(i);
+                    let env1 = if let Some(env1) = self.matches(env, w1, r1) {
+                        env1
+                    } else {
+                        continue;
+                    };
+                    let new_env = env.clone().concat(env1.clone());
+                    let env2 = if let Some(env2) = self.matches(&new_env, w2, r2) {
+                        env2
+                    } else {
+                        continue;
+                    };
+                    return Some(env1.concat(env2));
+                }
+                return None;
+            }
+            // GL-ALTL + GL-ALTR
+            RegularRightSide::Either(r1, r2) => {
+                let result1 = self.matches(env, w, r1);
+                if result1.is_some() {
+                    return result1;
+                }
+                let result2 = self.matches(env, w, r2);
+                if result2.is_some() {
+                    return result2;
+                }
+                return None;
+            }
+            // GL-*
+            //
+            // Remember that note up above about seeing the weakness of the API
+            // on GL-SEQ, because it needs to just guess the split point to use?
+            // This is in theory worse, since this rule as stated is
+            // parameterized over any choice of k splits of the string, where
+            // *empty strings are permitted*. and where the environment is being
+            // built up as we go.
+            //
+            // But, in practice, we need to keep in mind that the whole goal is
+            // to process the input string. I haven't yet figured out whether
+            // the constraint language could force one to match an arbitrary
+            // number of empty strings, but I'm not going to try to handle that
+            // case here for now. Instead, I'm going to assume that for Kleene
+            // closure that every substring of a non-empty input *is* non-empty.
+            RegularRightSide::Kleene(r) => {
+                // if the string is empty, we trivially match
+                if w.len() == 0 {
+                    return Some(expr::Env::empty());
+                }
+                // likewise, if the rule can match the whole string, then do that too
+                if let Some(e1) = self.matches(env, w, r) {
+                    return Some(e1);
+                }
+                // otherwise, we will enumerate the ways to break up the string.
+                // This is admittedly very dumb (e.g. it will mean we repeatedly
+                // check the same prefix an absurd number of times), but its a
+                // place to start.
+                for num_parts in 2..=w.len() {
+                    'next_splits: for splits in parts(w.len(), num_parts) {
+                        let mut w_suffix = w;
+                        let mut accum_eval_env = env.clone();
+                        let mut accum_ret_env = expr::Env::empty();
+                        for split in splits {
+                            let (w_pre, w_post) = w_suffix.split_at(split);
+                            if let Some(e_pre) = self.matches(&accum_eval_env, w_pre, r) {
+                                w_suffix = w_post;
+                                accum_eval_env = accum_eval_env.concat(e_pre.clone());
+                                accum_ret_env = accum_ret_env.concat(e_pre);
+                            } else {
+                                continue 'next_splits;
+                            }
+                        }
+                        assert_eq!(w_suffix.len(), 0);
+                        return Some(accum_ret_env);
+                    }
+                }
+                return None;
+            }
+            RegularRightSide::EmptyLanguage => None,
+        }
+    }
+}
+
+#[test]
+fn regular_right_sides() {
+    let g = Grammar::empty();
+    let emp = &expr::Env::empty();
+    fn right_side(s: &str) -> RegularRightSide {
+        yakker::RegularRightSideParser::new().parse(s).unwrap()
+    }
+    fn input(s: &str) -> [Term; 1] {
+        [s.into()]
+    }
+    assert!(g.matches(emp, &input("c"), &right_side(r"'c'")).is_some());
+    assert!(g.matches(emp, &input("d"), &right_side(r"'c'")).is_none());
+
+    // XXX the Concat case isn't working, but I'm not sure that's even parsing
+    // right now; there are no tests of it parsing.
+
+    // assert!(g.matches(emp, &input("ab"), &right_side(r"'a''b'")).is_some());
+}
+
+// given positive target T and positive count N where N <= T, returns iterator
+// over length-N vectors of positive numbers that add up to T.
+fn parts(target: usize, count: usize) -> impl Iterator<Item=Vec<usize>> {
+    assert!(count <= target);
+
+    // base case: trivial count
+    if count == 1 {
+        return vec![vec![target]].into_iter();
+    }
+
+    // recursive case: take a number, recur, map over results. repeat.
+    let mut results: Vec<Vec<usize>> = Vec::new();
+    for take in 1..target {
+        let sub_target = target - take;
+        let sub_count = count - 1;
+        // (TODO: change upper-bound to eliminate need to do this case.)
+        if sub_count > sub_target { continue; }
+        for sub_part in parts(sub_target, sub_count) {
+            let mut took = vec![take];
+            took.extend(sub_part.into_iter());
+            results.push(took);
+        }
+    }
+    return results.into_iter();
 }
 
 pub mod expr {
@@ -54,11 +292,16 @@ pub mod expr {
     #[derive(PartialEq, Eq, Clone, Debug)]
     pub struct Var(pub String);
 
+    // pub const Y_0: Var = Var("Y_0".into());
+    pub fn y_0() -> Var { Var("Y_0".into()) }
+
     #[derive(PartialEq, Eq, Clone, Debug)]
     pub enum Expr { Var(Var), Lit(Val), BinOp(BinOp, Box<Expr>, Box<Expr>) }
 
     #[derive(PartialOrd, Ord, PartialEq, Eq, Clone, Debug)]
     pub enum Val { Bool(bool), Unit, String(String), Int(i64), }
+
+    pub const TRUE: Val = Val::Bool(true);
 
     impl std::ops::Add<Val> for Val {
         type Output = Val;
@@ -107,7 +350,9 @@ pub mod expr {
     impl Env {
         pub fn empty() -> Self { Env(vec![]) }
 
-        pub fn bind(mut self, x: Var, v: Val) -> Self {
+        pub fn bind(x: Var, v: Val) -> Self { Env(vec![(x, v)]) }
+
+        pub fn extend(mut self, x: Var, v: Val) -> Self {
             self.0.push((x, v));
             self
         }
@@ -164,6 +409,19 @@ pub mod expr {
     impl From<String> for Val { fn from(s: String) -> Val { Val::String(s) } }
     impl From<&str> for Val { fn from(s: &str) -> Val { Val::String(s.to_string()) } }
     impl From<i64> for Val { fn from(n: i64) -> Val { Val::Int(n) } }
+    impl From<&[super::Term]> for Val {
+        fn from(terms: &[super::Term]) -> Val {
+            use super::Term;
+            let mut s = String::new();
+            for t in terms {
+                match t {
+                    Term::C(c) => s.push(*c),
+                    Term::S(s2) => s.push_str(&s2),
+                }
+            }
+            Val::String(s)
+        }
+    }
 
     impl From<bool> for Expr { fn from(b: bool) -> Expr { let v: Val = b.into(); v.into() } }
     impl From<()> for Expr { fn from((): ()) -> Expr { let v: Val = ().into(); v.into() } }
@@ -202,7 +460,7 @@ fn normalize_escapes(input: &str) -> Result<String, YakkerError> {
 
 #[test]
 fn yakker() {
-    use expr::{Expr, Var};
+    use expr::{Expr};
 
     assert_eq!(yakker::VarParser::new().parse("x"), Ok('x'.into()));
 
@@ -243,8 +501,6 @@ macro_rules! assert_matches {
 
 #[test]
 fn imperative_fixed_width_integer() {
-    use expr::{Expr, Var};
-
     assert_matches!(yakker::NonTermParser::new().parse("Int"), Ok(_));
     assert_matches!(yakker::RegularRightSideParser::new().parse("x:=Int(())"), Ok(_));
     assert_matches!(yakker::RightSideLeafParser::new().parse("'0'"), Ok(_));
@@ -331,7 +587,7 @@ fn imperative_fixed_width_integer() {
 //
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct Term(String);
+pub enum Term { C(char), S(String) }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct NonTerm(String);
 // #[derive(PartialEq, Eq, Clone, Debug)]
@@ -347,7 +603,7 @@ pub struct Binding(expr::Var, Val);
 #[derive(PartialEq, Eq, Clone)]
 pub struct BlackBox(String);
 
-impl From<&str> for Term { fn from(a: &str) -> Self { Self(a.into()) } }
+impl From<&str> for Term { fn from(a: &str) -> Self { Self::S(a.into()) } }
 impl From<&str> for NonTerm { fn from(a: &str) -> Self { Self(a.into()) } }
 impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
 
@@ -385,8 +641,10 @@ impl AbstractString {
     pub fn erased(&self) -> String {
         let mut accum = String::new();
         for n in &self.0 {
+            let backing: String;
             let s: &str = match n {
-                AbstractNode::Term(t) => &t.0,
+                AbstractNode::Term(Term::S(s)) => s,
+                AbstractNode::Term(Term::C(c)) => { backing = [c].into_iter().collect(); &backing }
                 AbstractNode::Binding(_) => continue,
                 AbstractNode::BlackBox(bb) => &bb.0,
                 AbstractNode::Parse(p) => &p.payload,
@@ -411,13 +669,19 @@ impl AbstractString {
 }
 
 impl Tree {
-    pub fn leaves(&self) -> Vec<&str> {
-        let mut accum: Vec<&str> = Vec::new();
+    pub fn leaves<'a>(&'a self) -> Vec<std::borrow::Cow<'a, str>> {
+        use std::borrow::Cow;
+        let mut accum: Vec<Cow<str>> = Vec::new();
         for n in &self.0  {
             match n {
-                AbstractNode::Term(t) => accum.push(&t.0),
+                AbstractNode::Term(Term::S(s)) => accum.push(s.into()),
+                AbstractNode::Term(Term::C(c)) => {
+                    let mut s = String::new();
+                    s.push(*c);
+                    accum.push(s.into());
+                }
                 AbstractNode::Binding(_) => continue,
-                AbstractNode::BlackBox(bb) => accum.push(&bb.0),
+                AbstractNode::BlackBox(bb) => accum.push((&bb.0).into()),
                 AbstractNode::Parse(p) => {
                     accum.extend(p.payload.leaves().into_iter())
                 }
@@ -438,7 +702,7 @@ impl Tree {
                     let input = input.clone();
                     let mut leaves = String::new();
                     for leaf in payload.leaves() {
-                        leaves.push_str(leaf);
+                        leaves.push_str(&leaf);
                     }
                     let payload = leaves;
                     accum.push(AbstractNode::Parse(Parsed {
