@@ -291,6 +291,27 @@ mod tests {
         assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}[x==4]"#)).is_none());
         assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}{x:=4}[x==4]"#)).is_some());
     }
+
+    #[test]
+    fn non_empty_grammar() {
+        let g1 = yakker::GrammarParser::new().parse(r"A::='c'").unwrap();
+        let emp = &expr::Env::empty();
+        assert!(g1.matches(emp, &input("c"), &right_side(r"x:=A(0)")).is_some());
+        assert!(g1.matches(emp, &input("d"), &right_side(r"x:=A(0)")).is_none());
+        let g2 = yakker::GrammarParser::new().parse(r"B::='d'").unwrap();
+        assert!(g2.matches(emp, &input("c"), &right_side(r"x:=B(0)")).is_none());
+        assert!(g2.matches(emp, &input("d"), &right_side(r"x:=B(0)")).is_some());
+        let g3 = Grammar { rules: g1.rules.into_iter().chain(g2.rules.into_iter()).collect() };
+        assert!(g3.matches(emp, &input("c"), &right_side(r"x:=A(0)")).is_some());
+        assert!(g3.matches(emp, &input("d"), &right_side(r"x:=B(0)")).is_some());
+        let g4 = yakker::GrammarParser::new().parse(r"A::='c' B::='d'").unwrap();
+        assert!(g4.matches(emp, &input("c"), &right_side(r"x:=A(0)")).is_some());
+        assert!(g4.matches(emp, &input("d"), &right_side(r"x:=B(0)")).is_some());
+        let g5 = yakker::GrammarParser::new().parse(r"A::=x:=C(0) B::=x:=D(1) C::='c' D::='d'").unwrap();
+        assert!(g5.matches(emp, &input("c"), &right_side(r"x:=A(0)")).is_some());
+        assert!(g5.matches(emp, &input("d"), &right_side(r"x:=B(0)")).is_some());
+        
+    }
 }
 
 #[test]
