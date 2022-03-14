@@ -304,10 +304,10 @@ mod tests {
         let g3 = Grammar { rules: g1.rules.into_iter().chain(g2.rules.into_iter()).collect() };
         assert!(g3.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
         assert!(g3.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
-        let g4 = yakker::GrammarParser::new().parse(r"A::='c' B::='d'").unwrap();
+        let g4 = yakker::GrammarParser::new().parse(r"A::='c'; B::='d'").unwrap();
         assert!(g4.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
         assert!(g4.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
-        let g5 = yakker::GrammarParser::new().parse(r"A::=<x:=C(0)> B::=<x:=D(1)> C::='c' D::='d'").unwrap();
+        let g5 = yakker::GrammarParser::new().parse(r"A::=<x:=C(0)>; B::=<x:=D(1)>; C::='c'; D::='d';").unwrap();
         assert!(g5.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
         assert!(g5.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
     }
@@ -315,11 +315,24 @@ mod tests {
     #[test]
     fn grammar_sugar() {
         let emp = &expr::Env::empty();
-        let g6 = yakker::GrammarParser::new().parse(r"A::=<Z(0)> B::=<y:=D> Z::=<C> C::='c' D::='d'").unwrap();
-        assert!(g6.matches(emp, &input("c"), &right_side(r"<x:=A>")).is_some());
-        assert!(g6.matches(emp, &input("d"), &right_side(r"<x:=A>")).is_none());
-        assert!(g6.matches(emp, &input("d"), &right_side(r"<B>")).is_some());
-        assert!(g6.matches(emp, &input("d"), &right_side(r"<A>")).is_none());
+        let g = yakker::GrammarParser::new().parse(r"A::=<Z(0)>; B::=<y:=D>; Z::=<C>; C::='c'; D::='d'").unwrap();
+        assert!(g.matches(emp, &input("c"), &right_side(r"<x:=A>")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"<x:=A>")).is_none());
+        assert!(g.matches(emp, &input("d"), &right_side(r"<B>")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"<A>")).is_none());
+        assert!(g.matches(emp, &input("c"), &right_side(r"x:=A")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"x:=A")).is_none());
+        assert!(g.matches(emp, &input("d"), &right_side(r"B")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"A")).is_none());
+        let g = yakker::GrammarParser::new().parse(r"A::=<Z(0)>; B::=y:=D; Z::=C; C::='c'; D::='d'").unwrap();
+        assert!(g.matches(emp, &input("c"), &right_side(r"<x:=A>")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"<x:=A>")).is_none());
+        assert!(g.matches(emp, &input("d"), &right_side(r"<B>")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"<A>")).is_none());
+        assert!(g.matches(emp, &input("c"), &right_side(r"x:=A")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"x:=A")).is_none());
+        assert!(g.matches(emp, &input("d"), &right_side(r"B")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"A")).is_none());
     }
 }
 
@@ -564,7 +577,7 @@ fn yakker() {
     assert_eq!(yakker::RuleParser::new().parse(r"A::='c'"), Ok(Rule("A".into(), None, RegularRightSide::Term("c".into()))));
 
     assert_eq!(yakker::GrammarParser::new().parse(r"A::='c'"), Ok(Grammar { rules: vec![Rule("A".into(), None, RegularRightSide::Term("c".into()))]}));
-    assert_eq!(yakker::GrammarParser::new().parse(r"A::='a' B::='b'"), Ok(Grammar { rules: vec![Rule("A".into(), None, RegularRightSide::Term("a".into())),
+    assert_eq!(yakker::GrammarParser::new().parse(r"A::='a'; B::='b'"), Ok(Grammar { rules: vec![Rule("A".into(), None, RegularRightSide::Term("a".into())),
     Rule("B".into(), None, RegularRightSide::Term("b".into()))]}));
 }
 

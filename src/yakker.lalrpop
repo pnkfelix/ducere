@@ -16,9 +16,9 @@ extern {
 }
 
 pub Grammar: Grammar = {
-    <r:Rule> =>
+    <r:Rule> ";"? =>
         Grammar { rules: Some(r).into_iter().collect() },
-    <r:Rule> <g: Grammar> =>
+    <r:Rule> ";" <g: Grammar> =>
         Grammar { rules: Some(r).into_iter().chain(g.rules.into_iter()).collect() }
 };
 
@@ -34,12 +34,17 @@ pub RightSideLeaf: RegularRightSide = {
     r#"''"# => RegularRightSide::EmptyString,
     "empty" => RegularRightSide::EmptyLanguage,
     <t:r"'\w'"> => RegularRightSide::Term(t[1..t.len()-1].into()),
+
+    <a:NonTerm> =>
+            RegularRightSide::NonTerm { x: None, A: a, e: None },
     "<" <a:NonTerm> ">" =>
             RegularRightSide::NonTerm { x: None, A: a, e: None },
     "<" <a:NonTerm> "(" <e:Expr> ")" ">" =>
             RegularRightSide::NonTerm { x: None, A: a, e: Some(e) },
     "<" <x:Var> ":=" <a:NonTerm> "(" <e:Expr> ")" ">" =>
             RegularRightSide::NonTerm { x: Some(x), A: a, e: Some(e) },
+    <x:Var> ":=" <a:NonTerm> =>
+            RegularRightSide::NonTerm { x: Some(x), A: a, e: None },
     "<" <x:Var> ":=" <a:NonTerm> ">" =>
             RegularRightSide::NonTerm { x: Some(x), A: a, e: None },
     "{" <x:Var> ":=" <e:Expr> "}" =>
