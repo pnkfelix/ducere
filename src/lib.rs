@@ -296,21 +296,30 @@ mod tests {
     fn non_empty_grammar() {
         let g1 = yakker::GrammarParser::new().parse(r"A::='c'").unwrap();
         let emp = &expr::Env::empty();
-        assert!(g1.matches(emp, &input("c"), &right_side(r"x:=A(0)")).is_some());
-        assert!(g1.matches(emp, &input("d"), &right_side(r"x:=A(0)")).is_none());
+        assert!(g1.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
+        assert!(g1.matches(emp, &input("d"), &right_side(r"<x:=A(0)>")).is_none());
         let g2 = yakker::GrammarParser::new().parse(r"B::='d'").unwrap();
-        assert!(g2.matches(emp, &input("c"), &right_side(r"x:=B(0)")).is_none());
-        assert!(g2.matches(emp, &input("d"), &right_side(r"x:=B(0)")).is_some());
+        assert!(g2.matches(emp, &input("c"), &right_side(r"<x:=B(0)>")).is_none());
+        assert!(g2.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
         let g3 = Grammar { rules: g1.rules.into_iter().chain(g2.rules.into_iter()).collect() };
-        assert!(g3.matches(emp, &input("c"), &right_side(r"x:=A(0)")).is_some());
-        assert!(g3.matches(emp, &input("d"), &right_side(r"x:=B(0)")).is_some());
+        assert!(g3.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
+        assert!(g3.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
         let g4 = yakker::GrammarParser::new().parse(r"A::='c' B::='d'").unwrap();
-        assert!(g4.matches(emp, &input("c"), &right_side(r"x:=A(0)")).is_some());
-        assert!(g4.matches(emp, &input("d"), &right_side(r"x:=B(0)")).is_some());
-        let g5 = yakker::GrammarParser::new().parse(r"A::=x:=C(0) B::=x:=D(1) C::='c' D::='d'").unwrap();
-        assert!(g5.matches(emp, &input("c"), &right_side(r"x:=A(0)")).is_some());
-        assert!(g5.matches(emp, &input("d"), &right_side(r"x:=B(0)")).is_some());
-        
+        assert!(g4.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
+        assert!(g4.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
+        let g5 = yakker::GrammarParser::new().parse(r"A::=<x:=C(0)> B::=<x:=D(1)> C::='c' D::='d'").unwrap();
+        assert!(g5.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
+        assert!(g5.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
+    }
+
+    #[test]
+    fn grammar_sugar() {
+        let emp = &expr::Env::empty();
+        let g6 = yakker::GrammarParser::new().parse(r"A::=<Z(0)> B::=<y:=D> Z::=<C> C::='c' D::='d'").unwrap();
+        assert!(g6.matches(emp, &input("c"), &right_side(r"<x:=A>")).is_some());
+        assert!(g6.matches(emp, &input("d"), &right_side(r"<x:=A>")).is_none());
+        assert!(g6.matches(emp, &input("d"), &right_side(r"<B>")).is_some());
+        assert!(g6.matches(emp, &input("d"), &right_side(r"<A>")).is_none());
     }
 }
 
@@ -576,7 +585,7 @@ macro_rules! assert_matches {
 #[test]
 fn imperative_fixed_width_integer() {
     assert_matches!(yakker::NonTermParser::new().parse("Int"), Ok(_));
-    assert_matches!(yakker::RegularRightSideParser::new().parse("x:=Int(())"), Ok(_));
+    assert_matches!(yakker::RegularRightSideParser::new().parse("<x:=Int(())>"), Ok(_));
     assert_matches!(yakker::RightSideLeafParser::new().parse("'0'"), Ok(_));
     assert_matches!(yakker::RuleParser::new().parse("Int ::= '0' "), Ok(_));
     assert_matches!(yakker::RuleParser::new().parse("Int ::= ( ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') )* "), Ok(_));

@@ -34,8 +34,14 @@ pub RightSideLeaf: RegularRightSide = {
     r#"''"# => RegularRightSide::EmptyString,
     "empty" => RegularRightSide::EmptyLanguage,
     <t:r"'\w'"> => RegularRightSide::Term(t[1..t.len()-1].into()),
-    <x:Var> ":=" <a:NonTerm> "(" <e:Expr> ")" =>
+    "<" <a:NonTerm> ">" =>
+            RegularRightSide::NonTerm { x: None, A: a, e: None },
+    "<" <a:NonTerm> "(" <e:Expr> ")" ">" =>
+            RegularRightSide::NonTerm { x: None, A: a, e: Some(e) },
+    "<" <x:Var> ":=" <a:NonTerm> "(" <e:Expr> ")" ">" =>
             RegularRightSide::NonTerm { x: Some(x), A: a, e: Some(e) },
+    "<" <x:Var> ":=" <a:NonTerm> ">" =>
+            RegularRightSide::NonTerm { x: Some(x), A: a, e: None },
     "{" <x:Var> ":=" <e:Expr> "}" =>
             RegularRightSide::Binding { x, e },
     "[" <e:Expr> "]" =>
