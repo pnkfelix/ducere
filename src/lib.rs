@@ -163,7 +163,8 @@ impl Grammar {
                              w, r1, r2, i);
                     let (w1,  w2) = w.split_at(i);
                     let w1_in_r1 = self.matches(env, w1, r1);
-                    println!("w1_in_r1: {:?}", w1_in_r1);
+                    println!("i: {} w1: {:?} r1: {:?} w1_in_r1: {:?}",
+                             i, w1, r1, w1_in_r1);
                     let env1 = if let Some(env1) = w1_in_r1 {
                         env1
                     } else {
@@ -221,6 +222,11 @@ impl Grammar {
                 // This is admittedly very dumb (e.g. it will mean we repeatedly
                 // check the same prefix an absurd number of times), but its a
                 // place to start.
+                //
+                // (One way to make this a little bit smarter would be to fold
+                // in the parts generation code, and then figure out how to
+                // "skip ahead" when we know a prefix of a given length doesn't
+                // match and thus will *never* match.)
                 for num_parts in 2..=w.len() {
                     'next_splits: for splits in parts(w.len(), num_parts) {
                         let mut w_suffix = w;
@@ -247,19 +253,61 @@ impl Grammar {
     }
 }
 
-#[test]
-fn regular_right_sides() {
-    let g = Grammar::empty();
-    let emp = &expr::Env::empty();
+#[cfg(test)]
+mod tests {
+    use super::*;
+
     fn right_side(s: &str) -> RegularRightSide {
         yakker::RegularRightSideParser::new().parse(s).unwrap()
     }
     fn input(s: &str) -> Vec<Term> {
         s.chars().map(|c| Term::C(c)).collect()
     }
-    assert!(g.matches(emp, &input("c"), &right_side(r"'c'")).is_some());
-    assert!(g.matches(emp, &input("d"), &right_side(r"'c'")).is_none());
-    assert!(g.matches(emp, &input("ab"), &right_side(r"'a''b'")).is_some());
+
+    #[test]
+    fn regular_right_sides() {
+        let g = Grammar::empty();
+        let emp = &expr::Env::empty();
+        assert!(g.matches(emp, &input("c"), &right_side(r"'c'")).is_some());
+        assert!(g.matches(emp, &input("d"), &right_side(r"'c'")).is_none());
+        assert!(g.matches(emp, &input("ab"), &right_side(r"'a''b'")).is_some());
+        assert!(g.matches(emp, &input("ac"), &right_side(r"'a''b'")).is_none());
+        assert!(g.matches(emp, &input("abc"), &right_side(r"'a''b''c'")).is_some());
+        assert!(g.matches(emp, &input("a"), &right_side(r"'a'|'b'")).is_some());
+        assert!(g.matches(emp, &input("b"), &right_side(r"'a'|'b'")).is_some());
+        assert!(g.matches(emp, &input("aaa"), &right_side(r"'a'*")).is_some());
+        assert!(g.matches(emp, &input("aaa"), &right_side(r"('a')*")).is_some());
+        assert!(g.matches(emp, &input("aaa"), &right_side(r"('a'|'b')*")).is_some());
+        assert!(g.matches(emp, &input("aba"), &right_side(r"('a'|'b')*")).is_some());
+        assert!(g.matches(emp, &input("aca"), &right_side(r"('a'|'b')*")).is_none());
+    }
+
+    #[test]
+    fn regular_right_sides_expression_dsl() {
+        let g = Grammar::empty();
+        let emp = &expr::Env::empty();
+        assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}"#)).is_some());
+        assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}[x==3]"#)).is_some());
+        assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}[x==4]"#)).is_none());
+        assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}{x:=4}[x==4]"#)).is_some());
+    }
+}
+
+#[test]
+fn test_parts() {
+    assert_eq!(parts(3, 1).collect::<Vec<_>>(),
+               vec![vec![3]]);
+    assert_eq!(parts(3, 2).collect::<Vec<_>>(),
+               vec![vec![1,2], vec![2,1]]);
+    assert_eq!(parts(4, 2).collect::<Vec<_>>(),
+               vec![vec![1,3], vec![2,2], vec![3,1]]);
+    assert_eq!(parts(4, 3).collect::<Vec<_>>(),
+               vec![vec![1,1,2], vec![1,2,1],
+                    vec![2,1,1]]);
+    assert_eq!(parts(5, 3).collect::<Vec<_>>(),
+               vec![vec![1,1,3], vec![1,2,2], vec![1,3,1],
+                    vec![2,1,2], vec![2,2,1],
+                    vec![3,1,1]]);
 }
 
 // given positive target T and positive count N where N <= T, returns iterator
@@ -274,11 +322,9 @@ fn parts(target: usize, count: usize) -> impl Iterator<Item=Vec<usize>> {
 
     // recursive case: take a number, recur, map over results. repeat.
     let mut results: Vec<Vec<usize>> = Vec::new();
-    for take in 1..target {
+    for take in 1..=(target - count + 1) {
         let sub_target = target - take;
         let sub_count = count - 1;
-        // (TODO: change upper-bound to eliminate need to do this case.)
-        if sub_count > sub_target { continue; }
         for sub_part in parts(sub_target, sub_count) {
             let mut took = vec![take];
             took.extend(sub_part.into_iter());
@@ -743,11 +789,3 @@ impl Tree {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
