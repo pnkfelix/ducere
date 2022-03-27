@@ -33,7 +33,7 @@ pub RightSideLeaf: RegularRightSide = {
     "(" <RegularRightSide> ")" => <>,
     r#"''"# => RegularRightSide::EmptyString,
     "empty" => RegularRightSide::EmptyLanguage,
-    <t:r"'\w'"> => RegularRightSide::Term(t[1..t.len()-1].into()),
+    <t:r"'[^'\\]'"> => RegularRightSide::Term(t[1..t.len()-1].into()),
 
     <a:NonTerm> =>
             RegularRightSide::NonTerm { x: None, A: a, e: None },
