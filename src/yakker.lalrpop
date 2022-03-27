@@ -91,11 +91,17 @@ pub Expr: Expr = CmpExpr;
 pub CmpExpr: Expr = {
     <e:AddSeq> => e,
     <e1:AddSeq> "==" <e2:AddSeq> => Expr::BinOp(BinOp::Eql, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "eql" <e2:AddSeq> => Expr::BinOp(BinOp::Eql, Box::new(e1), Box::new(e2)),
     <e1:AddSeq> "!=" <e2:AddSeq> => Expr::BinOp(BinOp::Neq, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "neq" <e2:AddSeq> => Expr::BinOp(BinOp::Neq, Box::new(e1), Box::new(e2)),
     <e1:AddSeq> ">" <e2:AddSeq> => Expr::BinOp(BinOp::Gt, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "gt" <e2:AddSeq> => Expr::BinOp(BinOp::Gt, Box::new(e1), Box::new(e2)),
     <e1:AddSeq> ">=" <e2:AddSeq> => Expr::BinOp(BinOp::Ge, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "ge" <e2:AddSeq> => Expr::BinOp(BinOp::Ge, Box::new(e1), Box::new(e2)),
     <e1:AddSeq> "<" <e2:AddSeq> => Expr::BinOp(BinOp::Lt, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "lt" <e2:AddSeq> => Expr::BinOp(BinOp::Lt, Box::new(e1), Box::new(e2)),
     <e1:AddSeq> "<=" <e2:AddSeq> => Expr::BinOp(BinOp::Le, Box::new(e1), Box::new(e2)),
+    <e1:AddSeq> "le" <e2:AddSeq> => Expr::BinOp(BinOp::Le, Box::new(e1), Box::new(e2)),
 }
 
 pub AddSeq: Expr = {
