@@ -6,18 +6,11 @@ pub trait Recognizer {
     fn accept(&self, iter: &mut dyn Iterator<Item=&Self::Term>) -> Option<Self::String>;
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct Blackbox {
     name: String,
-    from_val: Box<dyn Fn(expr::Val) -> Box<dyn Recognizer<Term=Term, String=String>>>,
+    from_val: fn(expr::Val) -> Box<dyn Recognizer<Term=Term, String=String>>,
 }
-
-impl PartialEq for Blackbox {
-    fn eq(&self, other: &Self) -> bool {
-        ((&*self.from_val) as *const _) == ((&*other.from_val) as *const _)
-    }
-}
-
-impl Eq for Blackbox { }
 
 impl std::fmt::Debug for Blackbox {
     fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -39,7 +32,7 @@ impl Grammar {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Rule(NonTerm, Option<expr::Var>, RegularRightSide);
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum RegularRightSide {
     EmptyString,
     EmptyLanguage,
@@ -52,6 +45,174 @@ pub enum RegularRightSide {
     Kleene(Box<Self>),
     Constraint(expr::Expr),
     Blackbox(Blackbox, expr::Expr),
+}
+
+#[derive(Copy, Clone)]
+enum RrsContext { Concat, Either, Kleene, }
+
+impl RegularRightSide {
+    fn needs_parens(&self, context: RrsContext) -> bool {
+        match (self, context) {
+            (RegularRightSide::EmptyString |
+             RegularRightSide::EmptyLanguage |
+             RegularRightSide::Term(_) |
+             RegularRightSide::NonTerm { .. } |
+             RegularRightSide::Binding { .. }, _) => false,
+
+            (RegularRightSide::Concat(..), RrsContext::Concat) => false,
+            (RegularRightSide::Concat(..), RrsContext::Either | RrsContext::Kleene) => true,
+
+            (RegularRightSide::Either(..), RrsContext::Either) => false,
+            (RegularRightSide::Either(..), RrsContext::Concat | RrsContext::Kleene) => true,
+
+            (RegularRightSide::Kleene(_), _) => false,
+
+            (RegularRightSide::Constraint(_), _) => false,
+            (RegularRightSide::Blackbox(..), _) => unimplemented!(),
+        }
+    }
+}
+
+impl std::fmt::Display for RegularRightSide {
+    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            RegularRightSide::EmptyString => write!(w, "''"),
+            RegularRightSide::EmptyLanguage => write!(w, "empty"),
+            RegularRightSide::Term(Term::C(c)) => write!(w, "'{}'", c),
+            RegularRightSide::Term(Term::S(s)) => write!(w, "'{}'", s),
+            RegularRightSide::NonTerm { x, A: NonTerm(name), e } => {
+                match (x, e) {
+                    (None, None) => write!(w, "{}", name),
+                    (None, Some(e)) => write!(w, "<{}({})>", name, e),
+                    (Some(expr::Var(x)), None) => write!(w, "<{}:={}>", x, name),
+                    (Some(expr::Var(x)), Some(e)) => write!(w, "<{}:={}({})>", x, name, e),
+                }
+            }
+            RegularRightSide::Binding { x: expr::Var(x), e } => write!(w, "{{ {} := {} }}", x, e),
+            RegularRightSide::Concat(lhs, rhs) => {
+                let ctxt = RrsContext::Concat;
+                if !lhs.needs_parens(ctxt) && !rhs.needs_parens(ctxt) {
+                    write!(w, "{} {}", lhs, rhs)
+                } else {
+                    write!(w, "({}) ({})", lhs, rhs)
+                }
+            }
+            RegularRightSide::Either(lhs, rhs) => {
+                let ctxt = RrsContext::Either;
+                if !lhs.needs_parens(ctxt) && !rhs.needs_parens(ctxt) {
+                    write!(w, "{} | {}", lhs, rhs)
+                } else {
+                    write!(w, "({}) | ({})", lhs, rhs)
+                }
+            }
+            RegularRightSide::Kleene(r) => {
+                let ctxt = RrsContext::Kleene;
+                if r.needs_parens(ctxt) {
+                    write!(w, "{}*", r)
+                } else {
+                    write!(w, "({})*", r)
+                }
+            }
+            RegularRightSide::Constraint(e) => {
+                write!(w, "[{}]", e)
+            }
+            RegularRightSide::Blackbox(_bb, _e) => {
+                unimplemented!()
+            }
+        }
+    }
+}
+
+trait Rendered {
+    fn rendered(&self) -> String;
+}
+
+impl Rendered for expr::Env {
+    fn rendered(&self) -> String {
+        format!("{}", self)
+    }
+}
+
+impl Rendered for Option<expr::Env> {
+    fn rendered(&self) -> String {
+        match self {
+            Some(env) => format!("{}", env),
+            None => "nil".to_string(),
+        }
+    }
+}
+
+impl Rendered for [Term] {
+    fn rendered(&self) -> String {
+        self.iter()
+            .map(|t| {
+                match t {
+                    Term::C(c) => c.to_string(),
+                    Term::S(s) => s.to_string(),
+                }
+            })
+            .collect()
+    }
+}
+
+trait Bother<T> { fn b_iter(self) -> Box<dyn Iterator<Item=T>>; }
+
+impl<T: 'static> Bother<T> for Option<T> {
+    fn b_iter(self) -> Box<dyn Iterator<Item=T>> {
+        Box::new(self.into_iter())
+    }
+}
+
+struct Cross<I: Iterator, ToJ, J> where I: Iterator,
+{
+    i_iter: I,
+    to_j: ToJ,
+    cursor: Option<(I::Item, J)>,
+}
+
+impl<I, ToJ, J>  Cross<I, ToJ, J> where
+    I: Iterator, ToJ: for<'a> FnMut(&'a I::Item) -> J, J: Iterator
+{
+    fn new(mut i_iter: I, mut to_j: ToJ) -> Self {
+        let curr_i = i_iter.next();
+        let cursor = curr_i.map(|i| {
+            let js = to_j(&i);
+            (i, js)
+        });
+        Self { i_iter, to_j, cursor }
+    }
+}
+
+impl<I, ToJ, J> Iterator for Cross<I, ToJ, J> where
+    I: Iterator, I::Item: Clone, ToJ: for<'a> FnMut(&'a I::Item) -> J, J: Iterator
+{
+    type Item = (I::Item, J::Item);
+    fn next(&mut self) -> Option<(I::Item, J::Item)> {
+        let (ref mut i, ref mut j_iter) = if let Some(t) = self.cursor.as_mut() { t } else { return None; };
+        'advance_j: loop {
+            if let Some(j) = j_iter.next() {
+                return Some((i.clone(), j));
+            }
+            // else: curr_j_iter exhausted. Advance to next i and try that.
+            let new_i = match self.i_iter.next() {
+                None => { self.cursor = None; return None; }
+                Some(i) => { i }
+            };
+            let new_j_iter = (self.to_j)(&new_i);
+            *i = new_i;
+            *j_iter = new_j_iter;
+            continue 'advance_j;
+        }
+    }
+}
+
+trait ParseMatches {
+    fn has_parse(&mut self) -> bool;
+    fn no_parse(&mut self) -> bool { ! self.has_parse() }
+}
+
+impl<'s> ParseMatches for Box<dyn Iterator<Item=expr::Env> + 's> {
+    fn has_parse(&mut self) -> bool { self.next().is_some() }
 }
 
 impl Grammar {
@@ -69,35 +230,69 @@ impl Grammar {
     //  get. (After all, if you didn't allow for that, and forced the system to
     //  yield every derivation, then that would preclude most optimizations for
     //  the parser.)
-    pub fn matches(&self, env: &expr::Env, w: &[Term], r: &RegularRightSide) -> Option<expr::Env> {
+    //     * revisiting this point: it is possible cannot avoid searching through
+    //       multiple potential matches. One issue is constraints [PRED]: if you
+    //       can get distinct environments out, you need to find the ones that will
+    //       satisfy PRED.
+    pub fn matches<'s>(&'s self, w: &'s [Term], r: &'s RegularRightSide) -> Box<dyn Iterator<Item=expr::Env> + 's> {
+        self.matches_recur(expr::Env::empty(), w, r, 0).0
+    }
+
+    fn split_matches<'s, 'a>(&'s self, mut splits: impl Clone + Iterator<Item=usize> + 's, env: expr::Env, w: &'s [Term], mut rs: impl Clone + Iterator<Item=&'s RegularRightSide> + 's, depth: usize) -> (Box<dyn Iterator<Item=expr::Env> + 's>, usize) {
+        let (split, r) = match (splits.next(), rs.next()) {
+            (Some(split), Some(r)) => (split, r),
+            _ => {
+                assert_eq!(w.len(), 0);
+                return (Some(expr::Env::empty()).b_iter(), depth);
+            }
+        };
+
+        let (w_pre, w_post) = w.split_at(split);
+        let (e_pre_iter, accum) = self.matches_recur(env.clone(), w_pre, &r, depth+1);
+        (Box::new(e_pre_iter.flat_map(move |left_env| {
+            let left_env = left_env.clone();
+            self.split_matches(splits.clone(), env.clone().concat(left_env.clone()), w_post, rs.clone(), accum+1).0
+                .map(move |env| left_env.clone().concat(env))
+        })), accum)
+    }
+
+    fn matches_recur<'s>(&'s self, env: expr::Env, w: &'s [Term], r: &'s RegularRightSide, depth: usize) -> (Box<dyn Iterator<Item=expr::Env> + 's>, usize) {
+        let accum = depth;
+        let indent: String = std::iter::repeat(' ').take(depth).collect();
+        println!("{}env: {} w: {:?} r: `{}`", indent, env, w.rendered(), r);
+
         match r {
             // GL-EPS
             RegularRightSide::EmptyString =>
                 if w.len() == 0 {
-                    Some(expr::Env::empty())
+                    (Some(expr::Env::empty()).b_iter(), accum)
                 } else {
-                    None
+                    (None.b_iter(), accum)
                 },
             // GL-TERM
             RegularRightSide::Term(t) =>
                 if t.matches(w) {
-                    Some(expr::Env::empty())
+                    (Some(expr::Env::empty()).b_iter(), accum)
                 } else {
-                    None
+                    (None.b_iter(), accum)
                 },
             // GL-PRED
             RegularRightSide::Constraint(e) =>
-                if e.eval(env) == expr::TRUE {
-                    Some(expr::Env::empty())
+                if e.eval(&env) == expr::TRUE {
+                    (Some(expr::Env::empty()).b_iter(), accum)
                 } else {
-                    None
+                    (None.b_iter(), accum)
                 }
             // GL-BIND
             RegularRightSide::Binding { x, e } =>
-                Some(expr::Env::bind(x.clone(), e.eval(env))),
+                if w.len() == 0 {
+                    (Some(expr::Env::bind(x.clone(), e.eval(&env))).b_iter(), accum)
+                } else {
+                    (None.b_iter(), accum)
+                },
             // GL-φ
             RegularRightSide::Blackbox(bb, e) => {
-                let v = e.eval(env);
+                let v = e.eval(&env);
                 let phi = (bb.from_val)(v);
                 // The BB interface is iterator based; but the spec for GL-φ
                 // implies that the whole string must be matched. We ensure this
@@ -115,9 +310,9 @@ impl Grammar {
                 let mut cs = w.iter().fuse();
                 let accepted = phi.accept(&mut cs);
                 if accepted.is_some() && cs.next().is_none() {
-                    Some(expr::Env::empty())
+                    (Some(expr::Env::empty()).b_iter(), accum)
                 } else {
-                    None
+                    (None.b_iter(), accum)
                 }
             }
             // GL-A
@@ -128,12 +323,12 @@ impl Grammar {
                         // great: non-parameterized terminals don't need values
                         expr::Env::empty(),
                     (Some(e), Some(y_0)) => {
-                        let v = e.eval(env);
+                        let v = e.eval(&env);
                         expr::Env::bind(y_0.clone(), v)
                     }
                     (Some(e), None) => {
                         // not as great: I'd prefer to not use y_0 formalism.
-                        let v = e.eval(env);
+                        let v = e.eval(&env);
                         expr::Env::bind(expr::y_0(), v)
                     }
                     (None, Some(y_0)) => {
@@ -142,13 +337,14 @@ impl Grammar {
                                e, _a, y_0);
                     }
                 };
-                let subresult = self.matches(&subenv, w, subrule);
-                subresult.map(|_discarded_env| {
-                    match x {
+                let (subresults, accum) = self.matches_recur(subenv, w, subrule, depth+1);
+                let x = x.clone();
+                (Box::new(subresults.map(move |_discarded_env| {
+                    match &x {
                         Some(x) => expr::Env::bind(x.clone(), w.into()),
                         None => expr::Env::empty(),
                     }
-                })
+                })), accum)
             }
             // GL-SEQ
             //
@@ -159,40 +355,35 @@ impl Grammar {
             // (including empty strings!).
             RegularRightSide::Concat(r1, r2) => {
                 for i in 0..=w.len() {
-                    println!("`{:?}` in Concat({:?},{:?}) trial i={}",
-                             w, r1, r2, i);
+                    let wr = w.rendered();
                     let (w1,  w2) = w.split_at(i);
-                    let w1_in_r1 = self.matches(env, w1, r1);
-                    println!("i: {} w1: {:?} r1: {:?} w1_in_r1: {:?}",
-                             i, w1, r1, w1_in_r1);
-                    let env1 = if let Some(env1) = w1_in_r1 {
-                        env1
-                    } else {
-                        continue;
-                    };
-                    let new_env = env.clone().concat(env1.clone());
-                    let w2_in_r2 = self.matches(&new_env, w2, r2);
-                    println!("w2_in_r2: {:?}", w2_in_r2);
-                    let env2 = if let Some(env2) = w2_in_r2 {
-                        env2
-                    } else {
-                        continue;
-                    };
-                    return Some(env1.concat(env2));
+                    println!("{}`{:?}` in Concat(`{}`,`{}`) trial i={} yields {:?} {:?}",
+                             indent, wr, r1, r2, i, w1.rendered(), w2.rendered());
+                    let (subresults_1, accum) = self.matches_recur(env.clone(), w1, r1, depth+1);
+                    let cross = Cross::new(
+                        subresults_1,
+                        |env1| {
+                            let new_env = env.clone().concat(env1.clone());
+                            let (subresults_2, accum) = self.matches_recur(new_env, w2, r2, accum+1);
+                            // println!("{}i: {} env2: {} w2: {:?} r2: `{}`, w2_in_r2: {:?}", indent, i, new_env, w2.rendered(), r2, format!("{}", &env2));
+                            subresults_2.map(move |sr| (sr, accum))
+                        });
+                    for (env1, (env2, accum)) in cross {
+                        println!("{}i: {} env: {} w1: {:?} r1: `{}` env1: {} w2: {:?} r2: `{}` env2: {}",
+                                 indent, i, env,
+                                 w1.rendered(), r1, env1.rendered(),
+                                 w2.rendered(), r2, env2.rendered(),
+                        );
+                        return (Some(env1.concat(env2)).b_iter(), accum);
+                    }
                 }
-                return None;
+                return (None.b_iter(), accum);
             }
             // GL-ALTL + GL-ALTR
             RegularRightSide::Either(r1, r2) => {
-                let result1 = self.matches(env, w, r1);
-                if result1.is_some() {
-                    return result1;
-                }
-                let result2 = self.matches(env, w, r2);
-                if result2.is_some() {
-                    return result2;
-                }
-                return None;
+                let (result1, accum) = self.matches_recur(env.clone(), w, r1, depth+1);
+                let (result2, accum) = self.matches_recur(env, w, r2, accum+1);
+                return (Box::new(result1.chain(result2)), accum);
             }
             // GL-*
             //
@@ -209,15 +400,15 @@ impl Grammar {
             // number of empty strings, but I'm not going to try to handle that
             // case here for now. Instead, I'm going to assume that for Kleene
             // closure that every substring of a non-empty input *is* non-empty.
-            RegularRightSide::Kleene(r) => {
+            RegularRightSide::Kleene(sr) => {
                 // if the string is empty, we trivially match
                 if w.len() == 0 {
-                    return Some(expr::Env::empty());
+                    println!("{}Kleene trivial empty match env: {} w: {:?} r: `{}`",
+                             indent, env, w.rendered(), r);
+                    return (Some(expr::Env::empty()).b_iter(), accum);
                 }
-                // likewise, if the rule can match the whole string, then do that too
-                if let Some(e1) = self.matches(env, w, r) {
-                    return Some(e1);
-                }
+
+                let r = sr;
                 // otherwise, we will enumerate the ways to break up the string.
                 // This is admittedly very dumb (e.g. it will mean we repeatedly
                 // check the same prefix an absurd number of times), but its a
@@ -227,28 +418,19 @@ impl Grammar {
                 // in the parts generation code, and then figure out how to
                 // "skip ahead" when we know a prefix of a given length doesn't
                 // match and thus will *never* match.)
-                for num_parts in 2..=w.len() {
-                    'next_splits: for splits in parts(w.len(), num_parts) {
-                        let mut w_suffix = w;
-                        let mut accum_eval_env = env.clone();
-                        let mut accum_ret_env = expr::Env::empty();
-                        for split in splits {
-                            let (w_pre, w_post) = w_suffix.split_at(split);
-                            if let Some(e_pre) = self.matches(&accum_eval_env, w_pre, r) {
-                                w_suffix = w_post;
-                                accum_eval_env = accum_eval_env.concat(e_pre.clone());
-                                accum_ret_env = accum_ret_env.concat(e_pre);
-                            } else {
-                                continue 'next_splits;
-                            }
-                        }
-                        assert_eq!(w_suffix.len(), 0);
-                        return Some(accum_ret_env);
-                    }
-                }
-                return None;
+                let num_parts_iter = 1..=w.len();
+                let indent = indent.clone();
+                (Box::new(num_parts_iter.flat_map(move |num_parts| {
+                    let env = env.clone();
+                    let indent = indent.clone();
+                    parts(w.len(), num_parts).flat_map(move |splits| {
+                        println!("{}Kleene considering splits {:?}", indent, splits);
+                        let all_r = std::iter::repeat(&**r);
+                        self.split_matches(splits.into_iter(), env.clone(), w, all_r, accum+1).0
+                    })
+                })), accum)
             }
-            RegularRightSide::EmptyLanguage => None,
+            RegularRightSide::EmptyLanguage => (None.b_iter(), accum),
         }
     }
 }
@@ -257,82 +439,78 @@ impl Grammar {
 mod tests {
     use super::*;
 
-    fn right_side(s: &str) -> RegularRightSide {
+    pub(crate) fn right_side(s: &str) -> RegularRightSide {
         yakker::RegularRightSideParser::new().parse(s).unwrap()
     }
-    fn input(s: &str) -> Vec<Term> {
+    pub(crate) fn input(s: &str) -> Vec<Term> {
         s.chars().map(|c| Term::C(c)).collect()
     }
 
     #[test]
     fn regular_right_sides() {
         let g = Grammar::empty();
-        let emp = &expr::Env::empty();
-        assert!(g.matches(emp, &input("c"), &right_side(r"'c'")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"'c'")).is_none());
-        assert!(g.matches(emp, &input("ab"), &right_side(r"'a''b'")).is_some());
-        assert!(g.matches(emp, &input("ac"), &right_side(r"'a''b'")).is_none());
-        assert!(g.matches(emp, &input("abc"), &right_side(r"'a''b''c'")).is_some());
-        assert!(g.matches(emp, &input("a"), &right_side(r"'a'|'b'")).is_some());
-        assert!(g.matches(emp, &input("b"), &right_side(r"'a'|'b'")).is_some());
-        assert!(g.matches(emp, &input("aaa"), &right_side(r"'a'*")).is_some());
-        assert!(g.matches(emp, &input("aaa"), &right_side(r"('a')*")).is_some());
-        assert!(g.matches(emp, &input("aaa"), &right_side(r"('a'|'b')*")).is_some());
-        assert!(g.matches(emp, &input("aba"), &right_side(r"('a'|'b')*")).is_some());
-        assert!(g.matches(emp, &input("aca"), &right_side(r"('a'|'b')*")).is_none());
+        assert!(g.matches(&input("c"), &right_side(r"'c'")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"'c'")).no_parse());
+        assert!(g.matches(&input("ab"), &right_side(r"'a''b'")).has_parse());
+        assert!(g.matches(&input("ac"), &right_side(r"'a''b'")).no_parse());
+        assert!(g.matches(&input("abc"), &right_side(r"'a''b''c'")).has_parse());
+        assert!(g.matches(&input("a"), &right_side(r"'a'|'b'")).has_parse());
+        assert!(g.matches(&input("b"), &right_side(r"'a'|'b'")).has_parse());
+        assert!(g.matches(&input("aaa"), &right_side(r"'a'*")).has_parse());
+        assert!(g.matches(&input("aaa"), &right_side(r"('a')*")).has_parse());
+        assert!(g.matches(&input("aaa"), &right_side(r"('a'|'b')*")).has_parse());
+        assert!(g.matches(&input("aba"), &right_side(r"('a'|'b')*")).has_parse());
+        assert!(g.matches(&input("aca"), &right_side(r"('a'|'b')*")).no_parse());
     }
 
     #[test]
     fn regular_right_sides_expression_dsl() {
         let g = Grammar::empty();
-        let emp = &expr::Env::empty();
-        assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}"#)).is_some());
-        assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}[x==3]"#)).is_some());
-        assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}[x==4]"#)).is_none());
-        assert!(g.matches(emp, &input(""), &right_side(r#"{x:=3}{x:=4}[x==4]"#)).is_some());
+        assert!(g.matches(&input(""), &right_side(r#"{x:=3}"#)).has_parse());
+        assert!(g.matches(&input(""), &right_side(r#"{x:=3}[x==3]"#)).has_parse());
+        assert!(g.matches(&input(""), &right_side(r#"{x:=3}[x==4]"#)).no_parse());
+        assert!(g.matches(&input(""), &right_side(r#"{x:=3}{x:=4}[x==4]"#)).has_parse());
     }
 
     #[test]
     fn non_empty_grammar() {
         let g1 = yakker::GrammarParser::new().parse(r"A::='c'").unwrap();
-        let emp = &expr::Env::empty();
-        assert!(g1.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
-        assert!(g1.matches(emp, &input("d"), &right_side(r"<x:=A(0)>")).is_none());
+        assert!(g1.matches(&input("c"), &right_side(r"<x:=A(0)>")).has_parse());
+        assert!(g1.matches(&input("d"), &right_side(r"<x:=A(0)>")).no_parse());
         let g2 = yakker::GrammarParser::new().parse(r"B::='d'").unwrap();
-        assert!(g2.matches(emp, &input("c"), &right_side(r"<x:=B(0)>")).is_none());
-        assert!(g2.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
+        assert!(g2.matches(&input("c"), &right_side(r"<x:=B(0)>")).no_parse());
+        assert!(g2.matches(&input("d"), &right_side(r"<x:=B(0)>")).has_parse());
         let g3 = Grammar { rules: g1.rules.into_iter().chain(g2.rules.into_iter()).collect() };
-        assert!(g3.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
-        assert!(g3.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
+        assert!(g3.matches(&input("c"), &right_side(r"<x:=A(0)>")).has_parse());
+        assert!(g3.matches(&input("d"), &right_side(r"<x:=B(0)>")).has_parse());
         let g4 = yakker::GrammarParser::new().parse(r"A::='c'; B::='d'").unwrap();
-        assert!(g4.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
-        assert!(g4.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
+        assert!(g4.matches(&input("c"), &right_side(r"<x:=A(0)>")).has_parse());
+        assert!(g4.matches(&input("d"), &right_side(r"<x:=B(0)>")).has_parse());
         let g5 = yakker::GrammarParser::new().parse(r"A::=<x:=C(0)>; B::=<x:=D(1)>; C::='c'; D::='d';").unwrap();
-        assert!(g5.matches(emp, &input("c"), &right_side(r"<x:=A(0)>")).is_some());
-        assert!(g5.matches(emp, &input("d"), &right_side(r"<x:=B(0)>")).is_some());
+        assert!(g5.matches(&input("c"), &right_side(r"<x:=A(0)>")).has_parse());
+        assert!(g5.matches(&input("d"), &right_side(r"<x:=B(0)>")).has_parse());
     }
 
     #[test]
     fn grammar_sugar() {
-        let emp = &expr::Env::empty();
         let g = yakker::GrammarParser::new().parse(r"A::=<Z(0)>; B::=<y:=D>; Z::=<C>; C::='c'; D::='d'").unwrap();
-        assert!(g.matches(emp, &input("c"), &right_side(r"<x:=A>")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"<x:=A>")).is_none());
-        assert!(g.matches(emp, &input("d"), &right_side(r"<B>")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"<A>")).is_none());
-        assert!(g.matches(emp, &input("c"), &right_side(r"x:=A")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"x:=A")).is_none());
-        assert!(g.matches(emp, &input("d"), &right_side(r"B")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"A")).is_none());
+        assert!(g.matches(&input("c"), &right_side(r"<x:=A>")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"<x:=A>")).no_parse());
+        assert!(g.matches(&input("d"), &right_side(r"<B>")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"<A>")).no_parse());
+        assert!(g.matches(&input("c"), &right_side(r"x:=A")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"x:=A")).no_parse());
+        assert!(g.matches(&input("d"), &right_side(r"B")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"A")).no_parse());
         let g = yakker::GrammarParser::new().parse(r"A::=<Z(0)>; B::=y:=D; Z::=C; C::='c'; D::='d'").unwrap();
-        assert!(g.matches(emp, &input("c"), &right_side(r"<x:=A>")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"<x:=A>")).is_none());
-        assert!(g.matches(emp, &input("d"), &right_side(r"<B>")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"<A>")).is_none());
-        assert!(g.matches(emp, &input("c"), &right_side(r"x:=A")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"x:=A")).is_none());
-        assert!(g.matches(emp, &input("d"), &right_side(r"B")).is_some());
-        assert!(g.matches(emp, &input("d"), &right_side(r"A")).is_none());
+        assert!(g.matches(&input("c"), &right_side(r"<x:=A>")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"<x:=A>")).no_parse());
+        assert!(g.matches(&input("d"), &right_side(r"<B>")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"<A>")).no_parse());
+        assert!(g.matches(&input("c"), &right_side(r"x:=A")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"x:=A")).no_parse());
+        assert!(g.matches(&input("d"), &right_side(r"B")).has_parse());
+        assert!(g.matches(&input("d"), &right_side(r"A")).no_parse());
     }
 }
 
@@ -378,8 +556,25 @@ fn parts(target: usize, count: usize) -> impl Iterator<Item=Vec<usize>> {
 }
 
 pub mod expr {
-    #[derive(PartialEq, Eq, Clone, Debug)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub enum BinOp { Add, Sub, Mul, Div, Gt, Ge, Lt, Le, Eql, Neq }
+
+    impl std::fmt::Display for BinOp {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(w, "{}", match *self {
+                BinOp::Add => "+",
+                BinOp::Sub => "-",
+                BinOp::Mul => "*",
+                BinOp::Div => "/",
+                BinOp::Gt => ">",
+                BinOp::Ge => ">=",
+                BinOp::Lt => "<",
+                BinOp::Le => "<=",
+                BinOp::Eql => "==",
+                BinOp::Neq => "!=",
+            })
+        }
+    }
     
     #[derive(PartialEq, Eq, Clone, Debug)]
     pub struct Var(pub String);
@@ -393,7 +588,51 @@ pub mod expr {
     #[derive(PartialOrd, Ord, PartialEq, Eq, Clone, Debug)]
     pub enum Val { Bool(bool), Unit, String(String), Int(i64), }
 
+    impl std::fmt::Display for Val {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match self {
+                Val::Bool(b) => write!(w, "{:?}", b),
+                Val::Unit => write!(w, "()"),
+                Val::String(s) => write!(w, "\"{}\"", s),
+                Val::Int(i) => write!(w, "{:?}", i),
+            }
+        }
+    }
+
     pub const TRUE: Val = Val::Bool(true);
+
+    impl Expr {
+        fn needs_parens(&self, ctxt: BinOp) -> bool {
+            match (self, ctxt) {
+                (Expr::Var(_), _) |
+                (Expr::Lit(_), _) => false,
+
+                (Expr::BinOp(inner_op, _lhs, _rhs), outer_op) => inner_op != &outer_op,
+            }
+        }
+    }
+
+    impl std::fmt::Display for Expr {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+           match self {
+                Expr::Var(Var(v)) => write!(w, "{}", v),
+                Expr::Lit(val) => write!(w, "{}", val),
+
+                Expr::BinOp(op, lhs, rhs) => {
+                    match (lhs.needs_parens(*op), rhs.needs_parens(*op)) {
+                        (true, true) => 
+                            write!(w, "({}) {} ({})", lhs, op, rhs),
+                        (true, false) => 
+                            write!(w, "({}) {} {}", lhs, op, rhs),
+                        (false, true) => 
+                            write!(w, "{} {} ({})", lhs, op, rhs),
+                        (false, false) => 
+                            write!(w, "{} {} {}", lhs, op, rhs),
+                    }
+                }
+            }
+        }
+    }
 
     impl std::ops::Add<Val> for Val {
         type Output = Val;
@@ -439,12 +678,24 @@ pub mod expr {
     #[derive(Clone, Debug)]
     pub struct Env(Vec<(Var, Val)>);
 
+    impl std::fmt::Display for Env {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+            let mut content: String = self.0.iter()
+                .map(|(Var(x), val)| format!("{}={},", x, val))
+                .collect();
+            // drop last comma, if any content was added at all.
+            content.pop();
+            write!(w, "[{}]", content)
+        }
+    }
+
     impl Env {
         pub fn empty() -> Self { Env(vec![]) }
 
         pub fn bind(x: Var, v: Val) -> Self { Env(vec![(x, v)]) }
 
         pub fn extend(mut self, x: Var, v: Val) -> Self {
+            self.0.retain(|(x_, _v_)| x_ != &x);
             self.0.push((x, v));
             self
         }
@@ -458,9 +709,12 @@ pub mod expr {
             None
         }
 
-        pub fn concat(mut self, e2: Env) -> Self {
-            self.0.extend(e2.0.into_iter());
-            self
+        pub fn concat(self, e2: Env) -> Self {
+            let mut s = self;
+            for (x, v) in e2.0.into_iter() {
+                s = s.extend(x, v);
+            }
+            s
         }
     }
 
@@ -596,7 +850,7 @@ macro_rules! assert_matches {
 }
 
 #[test]
-fn imperative_fixed_width_integer() {
+fn imperative_fixed_width_integer_foundations() {
     assert_matches!(yakker::NonTermParser::new().parse("Int"), Ok(_));
     assert_matches!(yakker::RegularRightSideParser::new().parse("<x:=Int(())>"), Ok(_));
     assert_matches!(yakker::RightSideLeafParser::new().parse("'0'"), Ok(_));
@@ -607,10 +861,56 @@ fn imperative_fixed_width_integer() {
     assert_matches!(yakker::RuleParser::new().parse("Int(n) ::= ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0]"), Ok(_));
 }
 
+#[cfg(test)]
+fn imperative_fixed_width_integer_grammar() -> Grammar {
+    yakker::GrammarParser::new().parse(r"Int(n) ::= ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0];").unwrap()
+}
+
+#[test]
+fn imperative_fixed_width_integer_1() {
+    use tests::{input, right_side};
+
+    let g = imperative_fixed_width_integer_grammar();
+    assert!(g.matches(&input("1"), &right_side(r"<Int(1)>")).has_parse());
+    assert!(g.matches(&input("0"), &right_side(r"<Int(1)>")).has_parse());
+}
+
+#[test]
+fn simpler_variant_on_ifwi2_a() {
+    use tests::{input, right_side};
+
+    assert!(yakker::GrammarParser::new().parse(r"S(n) ::= [n gt 0] 'a' { n := n-1 } [n gt 0] 'b' { n := n-1 } [n eql 0];")
+            .unwrap()
+            .matches(&input("ab"), &right_side(r"<S(2)>"))
+            .has_parse());
+}
+
+#[test]
+fn simpler_variant_on_ifwi2_b() {
+    use tests::{input, right_side};
+
+    assert!(yakker::GrammarParser::new().parse(r"S(n) ::= ([n gt 0] ( 'a' | 'b' ) { n := n- 1 })* [n eql 0];")
+            .unwrap()
+            .matches(&input("ab"), &right_side(r"<S(2)>"))
+            .has_parse());
+}
+
+#[test]
+fn imperative_fixed_width_integer_2() {
+    use tests::{input, right_side};
+    let g = imperative_fixed_width_integer_grammar();
+    assert!(g.matches(&input("10"), &right_side(r"<Int(2)>")).has_parse());
+}
+
 // Example: Functional fixed-width integer
 //
 //    dig = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 // int(n) = [n = 0] | [n > 0] dig int(n - 1)
+
+#[test]
+fn functional_fixed_width_integer() {
+
+}
 
 // Example: Left-factoring
 //
@@ -831,4 +1131,4 @@ impl Tree {
         AbstractString(accum)
     }
 }
-
+    
