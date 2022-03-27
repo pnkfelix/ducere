@@ -188,7 +188,10 @@ fn functional_fixed_width_integer() {
 fn left_factoring() {
     yakker::RuleParser::new().parse("A ::= (B '?') | (C '!')").unwrap();
     let g = yakker::GrammarParser::new().parse(r"A ::= (B '?') | (C '!'); B ::= 'x' '+' 'x'; C ::= ('x' '+' 'x') | ('x' '-' 'x');").unwrap();
-    assert!(g.matches(&input("x + x?"), &right_side("A")).has_parse());
+    assert!(g.matches(&input("x+x?"), &right_side("A")).has_parse());
+    assert!(g.matches(&input("x+x!"), &right_side("A")).has_parse());
+    assert!(g.matches(&input("x-x!"), &right_side("A")).has_parse());
+    assert!(g.matches(&input("x-x?"), &right_side("A")).no_parse());
 }
 
 // Example: "Regular right sides"
