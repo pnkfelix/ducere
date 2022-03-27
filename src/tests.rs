@@ -172,15 +172,24 @@ fn imperative_fixed_width_integer_2() {
 
 #[test]
 fn functional_fixed_width_integer() {
-
+    let g = yakker::GrammarParser::new().parse(r"Dig ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'; Int(n) ::= [n eql 0] | [ n gt 0 ] Dig <Int(n - 1)>;").unwrap();
+    assert!(g.matches(&input("0"), &right_side(r"<Int(1)>")).has_parse());
+    assert!(g.matches(&input("1"), &right_side(r"<Int(1)>")).has_parse());
+    assert!(g.matches(&input("10"), &right_side(r"<Int(2)>")).has_parse());
 }
 
 // Example: Left-factoring
 //
 // A = (B '?') | (C '!')
-// B = 'x' + 'x'
-// C = ('x' + 'x') | ('x' - 'x')
+// B = 'x' '+' 'x'
+// C = ('x' '+' 'x') | ('x' '-' 'x')
 
+#[test]
+fn left_factoring() {
+    yakker::RuleParser::new().parse("A ::= (B '?') | (C '!')").unwrap();
+    let g = yakker::GrammarParser::new().parse(r"A ::= (B '?') | (C '!'); B ::= 'x' '+' 'x'; C ::= ('x' '+' 'x') | ('x' '-' 'x');").unwrap();
+    assert!(g.matches(&input("x + x?"), &right_side("A")).has_parse());
+}
 
 // Example: "Regular right sides"
 //
