@@ -138,8 +138,6 @@ fn imperative_fixed_width_integer_grammar() -> Grammar {
 
 #[test]
 fn imperative_fixed_width_integer_1() {
-    use tests::{input, right_side};
-
     let g = imperative_fixed_width_integer_grammar();
     assert!(g.matches(&input("1"), &right_side(r"<Int(1)>")).has_parse());
     assert!(g.matches(&input("0"), &right_side(r"<Int(1)>")).has_parse());
@@ -147,8 +145,6 @@ fn imperative_fixed_width_integer_1() {
 
 #[test]
 fn simpler_variant_on_ifwi2_a() {
-    use tests::{input, right_side};
-
     assert!(yakker::GrammarParser::new().parse(r"S(n) ::= [n gt 0] 'a' { n := n-1 } [n gt 0] 'b' { n := n-1 } [n eql 0];")
             .unwrap()
             .matches(&input("ab"), &right_side(r"<S(2)>"))
@@ -157,8 +153,6 @@ fn simpler_variant_on_ifwi2_a() {
 
 #[test]
 fn simpler_variant_on_ifwi2_b() {
-    use tests::{input, right_side};
-
     assert!(yakker::GrammarParser::new().parse(r"S(n) ::= ([n gt 0] ( 'a' | 'b' ) { n := n- 1 })* [n eql 0];")
             .unwrap()
             .matches(&input("ab"), &right_side(r"<S(2)>"))
@@ -167,7 +161,6 @@ fn simpler_variant_on_ifwi2_b() {
 
 #[test]
 fn imperative_fixed_width_integer_2() {
-    use tests::{input, right_side};
     let g = imperative_fixed_width_integer_grammar();
     assert!(g.matches(&input("10"), &right_side(r"<Int(2)>")).has_parse());
 }
