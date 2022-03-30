@@ -1,5 +1,7 @@
 #[macro_use] extern crate lalrpop_util;
 
+use std::collections::HashSet;
+
 pub trait Recognizer {
     type Term;
     type String;
@@ -22,15 +24,42 @@ impl std::fmt::Debug for Blackbox {
 pub struct Grammar { pub rules: Vec<Rule> }
 
 impl Grammar {
+    pub fn nonterms(&self) -> HashSet<NonTerm> {
+        // one might argue that this should also scan the right-hand sides of
+        // the rules for non-terminals that are otherwise undefined. But I say
+        // that grmmars that do that deserve to be considered ill-formed.
+        self.rules.iter().map(|r|r.lhs.clone()).collect()
+    }
+    pub fn terms(&self) -> HashSet<Term> {
+        self.rules.iter().flat_map(|r|r.rhs.terms()).collect()
+    }
+}
+
+impl Grammar {
     pub fn empty() -> Self { Grammar { rules: vec![] } }
 
     fn rule(&self, nonterm: &NonTerm) -> Option<&Rule> {
-        self.rules.iter().find(|r| &r.0 == nonterm)
+        self.rules.iter().find(|r| &r.lhs == nonterm)
     }
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct Rule(NonTerm, Option<expr::Var>, RegularRightSide);
+pub struct Rule {
+    label: String,
+    lhs: NonTerm,
+    param: Option<expr::Var>,
+    rhs: RegularRightSide
+}
+
+impl Rule {
+    fn new(lhs: NonTerm, param: Option<expr::Var>, rhs: RegularRightSide) -> Rule {
+        Rule { label: String::new(), lhs, param, rhs }
+    }
+
+    fn labelled_new(label: impl Into<String>, lhs: NonTerm, param: Option<expr::Var>, rhs: RegularRightSide) -> Rule {
+        Rule { label: label.into(), lhs, param, rhs }
+    }
+}
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum RegularRightSide {
@@ -45,6 +74,26 @@ pub enum RegularRightSide {
     Kleene(Box<Self>),
     Constraint(expr::Expr),
     Blackbox(Blackbox, expr::Expr),
+}
+
+impl RegularRightSide {
+    fn terms(&self) -> Box<dyn Iterator<Item=Term>> {
+        match self {
+            RegularRightSide::EmptyString |
+            RegularRightSide::EmptyLanguage |
+            RegularRightSide::NonTerm { .. } |
+            RegularRightSide::Binding { .. }  |
+            RegularRightSide::Constraint(_) |
+            RegularRightSide::Blackbox(..) => None.b_iter(),
+
+            RegularRightSide::Term(t) => Some(t.clone()).b_iter(),
+
+            RegularRightSide::Concat(lhs, rhs) |
+            RegularRightSide::Either(lhs, rhs) => Box::new(lhs.terms().chain(rhs.terms())),
+
+            RegularRightSide::Kleene(inner) => inner.terms(),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -317,7 +366,8 @@ impl Grammar {
             }
             // GL-A
             RegularRightSide::NonTerm { x, A, e } => {
-                let Rule(_a, opt_var, subrule) = self.rule(A).unwrap();
+                let Rule { label: _ , lhs: _a, param: opt_var, rhs: subrule } =
+                    self.rule(A).unwrap();
                 let subenv = match (e, opt_var) {
                     (None, None) =>
                         // great: non-parameterized terminals don't need values
@@ -749,7 +799,7 @@ fn normalize_escapes(input: &str) -> Result<String, YakkerError> {
 //    |  phi(e)            <blackbox>
 //
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub enum Term { C(char), S(String) }
 
 impl Term {
@@ -773,7 +823,7 @@ impl Term {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub struct NonTerm(String);
 // #[derive(PartialEq, Eq, Clone, Debug)]
 // pub struct Var(String);

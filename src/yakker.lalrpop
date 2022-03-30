@@ -22,7 +22,7 @@ pub Grammar: Grammar = {
         Grammar { rules: Some(r).into_iter().chain(g.rules.into_iter()).collect() }
 };
 
-pub Rule: Rule = <nt:ParametricNonTerm> "::=" <r:RegularRightSide> => Rule(nt.0.into(), nt.1, r);
+pub Rule: Rule = <nt_start:@L> <nt:ParametricNonTerm> <nt_end:@R> "::=" <r:RegularRightSide> => Rule { label: format!("{}:{}", nt_start, nt_end), lhs: nt.0.into(), param: nt.1, rhs: r };
 
 pub ParametricNonTerm: (NonTerm, Option<Var>) = {
     <nt:NonTerm> "(" <v:Var> ")" => (nt, Some(v)),

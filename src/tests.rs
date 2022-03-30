@@ -98,11 +98,11 @@ fn yakker() {
                )));
     assert_eq!(yakker::NonTermParser::new().parse(r"A"), Ok("A".into()));
 
-    assert_eq!(yakker::RuleParser::new().parse(r"A::='c'"), Ok(Rule("A".into(), None, RegularRightSide::Term("c".into()))));
+    assert_eq!(yakker::RuleParser::new().parse(r"A::='c'"), Ok(Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("c".into()))));
 
-    assert_eq!(yakker::GrammarParser::new().parse(r"A::='c'"), Ok(Grammar { rules: vec![Rule("A".into(), None, RegularRightSide::Term("c".into()))]}));
-    assert_eq!(yakker::GrammarParser::new().parse(r"A::='a'; B::='b'"), Ok(Grammar { rules: vec![Rule("A".into(), None, RegularRightSide::Term("a".into())),
-    Rule("B".into(), None, RegularRightSide::Term("b".into()))]}));
+    assert_eq!(yakker::GrammarParser::new().parse(r"A::='c'"), Ok(Grammar { rules: vec![Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("c".into()))]}));
+    assert_eq!(yakker::GrammarParser::new().parse(r"A::='a'; B::='b'"), Ok(Grammar { rules: vec![Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("a".into())),
+    Rule::labelled_new("9:10", "B".into(), None, RegularRightSide::Term("b".into()))]}));
 }
 
 // Example: Imperative fixed-width integer
