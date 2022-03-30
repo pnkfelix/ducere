@@ -52,10 +52,12 @@ pub struct Rule {
 }
 
 impl Rule {
-    fn new(lhs: NonTerm, param: Option<expr::Var>, rhs: RegularRightSide) -> Rule {
+    #[cfg(test)]
+    pub fn new(lhs: NonTerm, param: Option<expr::Var>, rhs: RegularRightSide) -> Rule {
         Rule { label: String::new(), lhs, param, rhs }
     }
 
+    #[cfg(test)]
     fn labelled_new(label: impl Into<String>, lhs: NonTerm, param: Option<expr::Var>, rhs: RegularRightSide) -> Rule {
         Rule { label: label.into(), lhs, param, rhs }
     }
@@ -529,6 +531,11 @@ fn parts(target: usize, count: usize) -> impl Iterator<Item=Vec<usize>> {
     return results.into_iter();
 }
 
+/// Tiny DSL I'm using for prototyping Yakker's support for
+/// parameteric-nonterminals, inline-bindings, and conditional guards.
+///
+/// I imagine the full system, that leverages code-geneation, will support Rust
+/// (or whatever the target language is) in this context instead.
 pub mod expr {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub enum BinOp { Add, Sub, Mul, Div, Gt, Ge, Lt, Le, Eql, Neq }
@@ -855,6 +862,17 @@ pub enum AbstractNode<X> {
     Parse(Parsed<X>),
 }
 
+fn nonterminal_free<T>(v: &[AbstractNode<T>]) -> bool {
+    for n in v {
+        if let AbstractNode::Parse(..) = n {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub struct Sentential(pub Vec<AbstractNode<()>>);
+
 pub struct Tree(pub Vec<AbstractNode<Tree>>);
 
 // W : AbstractString
@@ -864,12 +882,7 @@ pub struct AbstractString(Vec<AbstractNode<String>>);
 impl AbstractString {
     // detetermines if W can be treated as an m.
     pub fn nonterminal_free(&self) -> bool {
-        for n in &self.0 {
-            if let AbstractNode::Parse(..) = n {
-                return false;
-            }
-        }
-        return true;
+        nonterminal_free(&self.0)
     }
 
     // ||W|| from paper
