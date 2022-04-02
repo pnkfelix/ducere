@@ -75,3 +75,78 @@ impl std::fmt::Display for RegularRightSide {
         }
     }
 }
+
+mod expr_display {
+    use crate::expr::{BinOp, Env, Expr, Val, Var};
+    impl std::fmt::Display for BinOp {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(w, "{}", match *self {
+                BinOp::Add => "+",
+                BinOp::Sub => "-",
+                BinOp::Mul => "*",
+                BinOp::Div => "/",
+                BinOp::Gt => ">",
+                BinOp::Ge => ">=",
+                BinOp::Lt => "<",
+                BinOp::Le => "<=",
+                BinOp::Eql => "==",
+                BinOp::Neq => "!=",
+            })
+        }
+    }
+    
+    impl std::fmt::Display for Val {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match self {
+                Val::Bool(b) => write!(w, "{:?}", b),
+                Val::Unit => write!(w, "()"),
+                Val::String(s) => write!(w, "\"{}\"", s),
+                Val::Int(i) => write!(w, "{:?}", i),
+            }
+        }
+    }
+
+    impl Expr {
+        fn needs_parens(&self, ctxt: BinOp) -> bool {
+            match (self, ctxt) {
+                (Expr::Var(_), _) |
+                (Expr::Lit(_), _) => false,
+
+                (Expr::BinOp(inner_op, _lhs, _rhs), outer_op) => inner_op != &outer_op,
+            }
+        }
+    }
+
+    impl std::fmt::Display for Expr {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+           match self {
+                Expr::Var(Var(v)) => write!(w, "{}", v),
+                Expr::Lit(val) => write!(w, "{}", val),
+
+                Expr::BinOp(op, lhs, rhs) => {
+                    match (lhs.needs_parens(*op), rhs.needs_parens(*op)) {
+                        (true, true) => 
+                            write!(w, "({}) {} ({})", lhs, op, rhs),
+                        (true, false) => 
+                            write!(w, "({}) {} {}", lhs, op, rhs),
+                        (false, true) => 
+                            write!(w, "{} {} ({})", lhs, op, rhs),
+                        (false, false) => 
+                            write!(w, "{} {} {}", lhs, op, rhs),
+                    }
+                }
+            }
+        }
+    }
+
+    impl std::fmt::Display for Env {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+            let mut content: String = self.bindings()
+                .map(|(Var(x), val)| format!("{}={},", x, val))
+                .collect();
+            // drop last comma, if any content was added at all.
+            content.pop();
+            write!(w, "[{}]", content)
+        }
+    }
+}

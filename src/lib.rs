@@ -436,23 +436,6 @@ pub mod expr {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub enum BinOp { Add, Sub, Mul, Div, Gt, Ge, Lt, Le, Eql, Neq }
 
-    impl std::fmt::Display for BinOp {
-        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
-            write!(w, "{}", match *self {
-                BinOp::Add => "+",
-                BinOp::Sub => "-",
-                BinOp::Mul => "*",
-                BinOp::Div => "/",
-                BinOp::Gt => ">",
-                BinOp::Ge => ">=",
-                BinOp::Lt => "<",
-                BinOp::Le => "<=",
-                BinOp::Eql => "==",
-                BinOp::Neq => "!=",
-            })
-        }
-    }
-    
     #[derive(PartialEq, Eq, Clone, Debug)]
     pub struct Var(pub String);
 
@@ -465,51 +448,8 @@ pub mod expr {
     #[derive(PartialOrd, Ord, PartialEq, Eq, Clone, Debug)]
     pub enum Val { Bool(bool), Unit, String(String), Int(i64), }
 
-    impl std::fmt::Display for Val {
-        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
-            match self {
-                Val::Bool(b) => write!(w, "{:?}", b),
-                Val::Unit => write!(w, "()"),
-                Val::String(s) => write!(w, "\"{}\"", s),
-                Val::Int(i) => write!(w, "{:?}", i),
-            }
-        }
-    }
-
     pub const TRUE: Val = Val::Bool(true);
 
-    impl Expr {
-        fn needs_parens(&self, ctxt: BinOp) -> bool {
-            match (self, ctxt) {
-                (Expr::Var(_), _) |
-                (Expr::Lit(_), _) => false,
-
-                (Expr::BinOp(inner_op, _lhs, _rhs), outer_op) => inner_op != &outer_op,
-            }
-        }
-    }
-
-    impl std::fmt::Display for Expr {
-        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
-           match self {
-                Expr::Var(Var(v)) => write!(w, "{}", v),
-                Expr::Lit(val) => write!(w, "{}", val),
-
-                Expr::BinOp(op, lhs, rhs) => {
-                    match (lhs.needs_parens(*op), rhs.needs_parens(*op)) {
-                        (true, true) => 
-                            write!(w, "({}) {} ({})", lhs, op, rhs),
-                        (true, false) => 
-                            write!(w, "({}) {} {}", lhs, op, rhs),
-                        (false, true) => 
-                            write!(w, "{} {} ({})", lhs, op, rhs),
-                        (false, false) => 
-                            write!(w, "{} {} {}", lhs, op, rhs),
-                    }
-                }
-            }
-        }
-    }
 
     impl std::ops::Add<Val> for Val {
         type Output = Val;
@@ -555,17 +495,6 @@ pub mod expr {
     #[derive(Clone, Debug)]
     pub struct Env(Vec<(Var, Val)>);
 
-    impl std::fmt::Display for Env {
-        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
-            let mut content: String = self.0.iter()
-                .map(|(Var(x), val)| format!("{}={},", x, val))
-                .collect();
-            // drop last comma, if any content was added at all.
-            content.pop();
-            write!(w, "[{}]", content)
-        }
-    }
-
     impl Env {
         pub fn empty() -> Self { Env(vec![]) }
 
@@ -592,6 +521,10 @@ pub mod expr {
                 s = s.extend(x, v);
             }
             s
+        }
+
+        pub(crate) fn bindings(&self) -> impl Iterator<Item=&(Var, Val)> {
+            self.0.iter()
         }
     }
 
