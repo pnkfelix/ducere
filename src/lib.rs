@@ -2,6 +2,112 @@
 
 use std::collections::HashSet;
 
+pub mod transducer {
+    use std::collections::{HashMap};
+    use crate::{Blackbox, NonTerm, Term};
+    use crate::expr::{Expr, Var}/*}*/;  // check out the (bad) error you get with that uncommented.
+    use crate::yakker;
+
+    pub enum Action {
+        Term(Term),
+        Constraint(Expr),
+        Binding(Var, Expr),
+        Blackbox(Blackbox, Expr),
+        NonTerm(Var, NonTerm, Expr),
+    }
+
+    pub struct Transducer {
+        pub(crate) states: HashMap<State, StateData>,
+    }
+
+    #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+    pub struct State(usize);
+
+    pub struct StateData {
+        label: String,
+        transitions: Vec<(Action, State)>,
+        calls: Vec<(Expr, State)>,
+        output_if_final: Option<NonTerm>,
+    }
+
+    struct StateBuilder(StateData);
+        
+    impl StateBuilder {
+        fn final_state(nt: String) -> Self {
+            Self(StateData {
+                label: nt.clone(),
+                transitions: vec![],
+                calls: vec![],
+                output_if_final: Some(NonTerm(nt)),
+            })
+        }
+
+        fn labelled(l: String) -> Self {
+            Self(StateData {
+                label: l,
+                transitions: vec![],
+                calls: vec![],
+                output_if_final: None,
+            })
+        }
+
+        fn action(mut self, action: Action, next: State) -> Self {
+            self.0.transitions.push((action, next));
+            self
+        }
+
+        fn term(self, term: Term, next: State) -> Self {
+            self.action(Action::Term(term), next)
+        }
+
+        fn constraint(self, expr: Expr, next: State) -> Self {
+            self.action(Action::Constraint(expr), next)
+        }
+
+        fn binding(self, var: Var, expr: Expr, next: State) -> Self {
+            self.action(Action::Binding(var, expr), next)
+        }
+
+        fn non_term(self, var: Var, nt: NonTerm, expr: Expr, next: State) -> Self {
+            self.action(Action::NonTerm(var, nt, expr), next)
+        }
+
+        fn build(self) -> StateData {
+            self.0
+        }
+    }
+
+    pub fn fig_2_a() -> Transducer {
+        let s0 = State(0);
+        let s1 = State(1);
+        let s2 = State(2);
+        let s3 = State(3);
+        let d0 = StateBuilder::final_state(format!("int")).build();
+        let d1 = StateBuilder::labelled("1".into())
+            .constraint(yakker::ExprParser::new().parse("n == 0").unwrap(), s0)
+            .constraint(yakker::ExprParser::new().parse("n > 0").unwrap(), s2)
+            .build();
+        let d2 = StateBuilder::labelled("2".into())
+            .term(Term::C('0'), s3)
+            .term(Term::C('1'), s3)
+            .term(Term::C('2'), s3)
+            .term(Term::C('3'), s3)
+            .term(Term::C('4'), s3)
+            .term(Term::C('5'), s3)
+            .term(Term::C('6'), s3)
+            .term(Term::C('7'), s3)
+            .term(Term::C('8'), s3)
+            .term(Term::C('9'), s3)
+            .build();
+        let d3 = StateBuilder::labelled("3".into())
+            .binding(Var("n".into()), yakker::ExprParser::new().parse("n-1").unwrap(), s1)
+            .build();
+        Transducer {
+            states: vec![(s0, d0), (s1, d1), (s2, d2), (s3, d3)].into_iter().collect()
+        }
+    }
+}
+
 pub trait Recognizer {
     type Term;
     type String;
@@ -78,10 +184,10 @@ pub enum RegularRightSide {
     Blackbox(Blackbox, expr::Expr),
 }
 
-trait Bother<T> { fn b_iter(self) -> Box<dyn Iterator<Item=T>>; }
+trait Bother<'a, T> { fn b_iter(self) -> Box<dyn Iterator<Item=T> + 'a>; }
 
-impl<T: 'static> Bother<T> for Option<T> {
-    fn b_iter(self) -> Box<dyn Iterator<Item=T>> {
+impl<'a, T:'a> Bother<'a, T> for Option<T> {
+    fn b_iter(self) -> Box<dyn Iterator<Item=T>+'a> {
         Box::new(self.into_iter())
     }
 }
