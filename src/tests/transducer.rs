@@ -2,6 +2,7 @@
 
 use crate::transducer::*;
 use crate::tests::*;
+use crate::expr;
 use crate::specification_rules::transducer::{TransducerConfig};
 use crate::yakker;
 
@@ -36,8 +37,20 @@ pub fn fig_2_a() -> Transducer {
 }
 
 #[test]
-fn imperative_fixe_width_integer() {
+fn imperative_fixed_width_integer() {
     let t = fig_2_a();
-    let config = TransducerConfig(vec![]);
-    assert_eq!(t.matches(config, &input("1")), vec![]);
+    let one_digit = expr::Env::bind("n".into(), 1.into());
+    let config = TransducerConfig::fresh(State(1), one_digit);
+    let next = config.clone().map_tip(|frame|frame.with_curr(State(2)));
+    assert_eq!(t.matches(config.clone(), &input("1")), vec![(next.clone(), 0)]);
+    let config = next;
+    let next = config.clone().map_tip(|frame|frame.with_curr(State(3)).with_term(Term::C('1')));
+    assert_eq!(t.matches(config.clone(), &input("1")), vec![(next.clone(), 1)]);
+    let config = next;
+    let next = config.clone().map_tip(|frame|frame.with_curr(State(1)).with_bind("n".into(), 0.into()));
+    assert_eq!(t.matches(config.clone(), &input("")), vec![(next.clone(), 0)]);
+    let config = next;
+    let next = config.clone().map_tip(|frame|frame.with_curr(State(0)));
+    assert_eq!(t.matches(config.clone(), &input("")), vec![(next.clone(), 0)]);
+    assert_eq!(t.data(next.state()).output_if_final(), Some(["int".into()].as_slice()));
 }

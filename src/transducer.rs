@@ -2,6 +2,7 @@ use std::collections::{HashMap};
 use crate::{Blackbox, NonTerm, Term};
 use crate::expr::{Expr, Var}/*}*/;  // check out the (bad) error you get with that uncommented.
 
+#[derive(Debug)]
 pub enum Action {
     Term(Term),
     Constraint(Expr),
@@ -23,6 +24,7 @@ impl Transducer {
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct State(usize);
 
+#[derive(Debug)]
 pub struct StateData {
     label: String,
     transitions: Vec<(Action, State)>,
@@ -43,10 +45,10 @@ impl StateData {
     }
 }
 
-struct StateBuilder(StateData);
+pub struct StateBuilder(StateData);
 
 impl StateBuilder {
-    fn final_state(nt: String) -> Self {
+    pub fn final_state(nt: String) -> Self {
         Self(StateData {
             label: nt.clone(),
             transitions: vec![],
@@ -55,7 +57,7 @@ impl StateBuilder {
         })
     }
 
-    fn labelled(l: String) -> Self {
+    pub fn labelled(l: String) -> Self {
         Self(StateData {
             label: l,
             transitions: vec![],
@@ -64,28 +66,28 @@ impl StateBuilder {
         })
     }
 
-    fn action(mut self, action: Action, next: State) -> Self {
+    pub fn action(mut self, action: Action, next: State) -> Self {
         self.0.transitions.push((action, next));
         self
     }
 
-    fn term(self, term: Term, next: State) -> Self {
+    pub fn term(self, term: Term, next: State) -> Self {
         self.action(Action::Term(term), next)
     }
 
-    fn constraint(self, expr: Expr, next: State) -> Self {
+    pub fn constraint(self, expr: Expr, next: State) -> Self {
         self.action(Action::Constraint(expr), next)
     }
 
-    fn binding(self, var: Var, expr: Expr, next: State) -> Self {
+    pub fn binding(self, var: Var, expr: Expr, next: State) -> Self {
         self.action(Action::Binding(var, expr), next)
     }
 
-    fn non_term(self, var: Var, nt: NonTerm, expr: Expr, next: State) -> Self {
+    pub fn non_term(self, var: Var, nt: NonTerm, expr: Expr, next: State) -> Self {
         self.action(Action::NonTerm(var, nt, expr), next)
     }
 
-    fn build(self) -> StateData {
+    pub fn build(self) -> StateData {
         self.0
     }
 }

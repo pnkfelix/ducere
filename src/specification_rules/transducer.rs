@@ -9,6 +9,28 @@ pub(crate) struct TransducerConfigFrame {
     curr: State
 }
 
+#[cfg(test)]
+impl TransducerConfigFrame {
+    pub fn with_curr(&self, new_curr: State) -> Self {
+        let mut n = self.clone();
+        n.curr = new_curr;
+        n
+    }
+
+    pub fn with_term(&self, term: Term) -> Self {
+        let mut n = self.clone();
+        n.tree.extend_term(term);
+        n
+    }
+
+    pub fn with_bind(&self, var: expr::Var, val: expr::Val) -> Self {
+        let mut n = self.clone();
+        n.tree.extend_bind(var.clone(), val.clone());
+        n.env.extend(var, val);
+        n
+    }
+}
+
 impl TransducerConfigFrame {
     fn match_term(&mut self, term: Term, new_state: State) {
         self.tree.extend_term(term);
@@ -45,9 +67,18 @@ impl TransducerConfigFrame {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct TransducerConfig(pub Vec<TransducerConfigFrame>);
+pub struct TransducerConfig(pub(crate) Vec<TransducerConfigFrame>);
 
 impl TransducerConfig {
+    pub fn fresh(start: State, env: expr::Env) -> Self {
+        TransducerConfig(vec![TransducerConfigFrame {
+            call_context: start,
+            env: env,
+            tree: Tree(vec![]),
+            curr: start,
+        }])
+    }
+
     fn unspool(mut self) -> Option<(TransducerConfigFrame, Self)> {
         let tip = self.0.pop();
         tip.map(|t| (t, self))
@@ -57,9 +88,24 @@ impl TransducerConfig {
         self.0.push(c);
         self
     }
+}
 
-    fn peek(&self) -> Option<&TransducerConfigFrame> {
-        self.0.iter().rev().peekable().peek().map(|x|*x)
+#[cfg(test)]
+impl TransducerConfig {
+    pub(crate) fn map_tip(self, f: impl FnOnce(TransducerConfigFrame) -> TransducerConfigFrame) -> Self {
+        if let Some((tip, s)) = self.unspool() {
+            s.respool(f(tip))
+        } else {
+            TransducerConfig(vec![])
+        }
+    }
+
+    pub(crate) fn peek(&self) -> &TransducerConfigFrame {
+        self.0.iter().rev().peekable().peek().map(|x|*x).unwrap()
+    }
+
+    pub fn state(&self) -> State {
+        self.peek().curr
     }
 }
 
@@ -69,7 +115,7 @@ impl Transducer {
     // (q, E, T, r)::tl ⇒ (q', E', T', r')::tl'
     //
     // where we are given a sequence of terminals to match against.
-    pub(crate) fn matches(&self, c: TransducerConfig, ts: &[Term]) -> Vec<TransducerConfig> {
+    pub fn matches(&self, c: TransducerConfig, ts: &[Term]) -> Vec<(TransducerConfig, usize)> {
         let mut accum = Vec::new();
         let (tip, tail) = if let Some(tip_tail) = c.clone().unspool() { tip_tail } else {
             return accum;
@@ -83,7 +129,7 @@ impl Transducer {
                     if ts.get(0) == Some(t) {
                         let mut tip = tip.clone();
                         tip.match_term(t.clone(), state);
-                        accum.push(tail.clone().respool(tip));
+                        accum.push((tail.clone().respool(tip), 1));
                     } else {
                         // term doesn't match; transition cannot fire here.
                     }
@@ -92,7 +138,7 @@ impl Transducer {
                     if e.eval(&tip.env) == expr::Val::Bool(true) {
                         let mut tip = tip.clone();
                         tip.match_pred(&e, state);
-                        accum.push(tail.clone().respool(tip));
+                        accum.push((tail.clone().respool(tip), 0));
                     } else {
                         // expr untrue in this env; transition cannot fire here.
                     }
@@ -102,7 +148,7 @@ impl Transducer {
                     let val = e.eval(&tip.env);
                     let mut tip = tip.clone();
                     tip.match_bind(x.clone(), e, val, state);
-                    accum.push(tail.clone().respool(tip));
+                    accum.push((tail.clone().respool(tip), 0));
                 }
                 Action::Blackbox(_bb, e) => {
                     let _val = e.eval(&tip.env);
@@ -127,7 +173,7 @@ impl Transducer {
                 tree: Tree(vec![]),
                 curr: state,
             };
-            accum.push(c.clone().respool(next));
+            accum.push((c.clone().respool(next), 0));
         }
 
         // Return transitions, i.e. S-Return
@@ -150,10 +196,10 @@ impl Transducer {
 
                 let mut caller = caller.clone();
                 caller.match_return(x.clone(), tip.tree.clone(), nt.clone(), v, state);
-                accum.push(tail2.clone().respool(caller));
+                accum.push((tail2.clone().respool(caller), 0));
             }
         };
-        
+
         return accum;
     }
 }
