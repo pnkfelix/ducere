@@ -20,6 +20,12 @@ pub mod transducer {
         pub(crate) states: HashMap<State, StateData>,
     }
 
+    impl Transducer {
+        pub fn data(&self, state: State) -> &StateData {
+            &self.states[&state]
+        }
+    }
+
     #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
     pub struct State(usize);
 
@@ -27,18 +33,31 @@ pub mod transducer {
         label: String,
         transitions: Vec<(Action, State)>,
         calls: Vec<(Expr, State)>,
-        output_if_final: Option<NonTerm>,
+        output_if_final: Option<Vec<NonTerm>>,
+    }
+
+    impl StateData {
+        pub fn label(&self) -> &str { &self.label }
+        pub fn transitions(&self) -> &[(Action, State)] {
+            &self.transitions
+        }
+        pub fn calls(&self) -> &[(Expr, State)] {
+            &self.calls
+        }
+        pub fn output_if_final(&self) -> Option<&[NonTerm]> {
+            self.output_if_final.as_ref().map(|v| &v[..])
+        }
     }
 
     struct StateBuilder(StateData);
-        
+
     impl StateBuilder {
         fn final_state(nt: String) -> Self {
             Self(StateData {
                 label: nt.clone(),
                 transitions: vec![],
                 calls: vec![],
-                output_if_final: Some(NonTerm(nt)),
+                output_if_final: Some(vec![NonTerm(nt)]),
             })
         }
 
@@ -304,7 +323,7 @@ pub mod expr {
 
         pub fn bind(x: Var, v: Val) -> Self { Env(vec![(x, v)]) }
 
-        pub fn extend(mut self, x: Var, v: Val) -> Self {
+        pub fn extend(&mut self, x: Var, v: Val) -> &Self {
             self.0.retain(|(x_, _v_)| x_ != &x);
             self.0.push((x, v));
             self
@@ -322,7 +341,7 @@ pub mod expr {
         pub fn concat(self, e2: Env) -> Self {
             let mut s = self;
             for (x, v) in e2.0.into_iter() {
-                s = s.extend(x, v);
+                s.extend(x, v);
             }
             s
         }
@@ -369,6 +388,11 @@ pub mod expr {
     impl From<String> for Val { fn from(s: String) -> Val { Val::String(s) } }
     impl From<&str> for Val { fn from(s: &str) -> Val { Val::String(s.to_string()) } }
     impl From<i64> for Val { fn from(n: i64) -> Val { Val::Int(n) } }
+    impl<'a> From<&[std::borrow::Cow<'a, str>]> for Val {
+        fn from(strs: &[std::borrow::Cow<'a, str>]) -> Val {
+            Val::String(strs.iter().map(|cow|&**cow).collect::<String>())
+        }
+    }
     impl From<&[super::Term]> for Val {
         fn from(terms: &[super::Term]) -> Val {
             use super::Term;
@@ -470,9 +494,19 @@ pub struct NonTerm(String);
 #[derive(PartialEq, Eq, Clone)]
 pub struct Val(String);
 
+impl From<crate::expr::Val> for Val {
+    fn from(v: crate::expr::Val) -> Val {
+        if let crate::expr::Val::String(s) = v {
+            Val(s)
+        } else {
+            panic!("tried to convert non-string expressed value {:?} into a string-val", v);
+        }
+    }
+}
+
 // notation from paper: `{x := v }`
 #[derive(PartialEq, Eq, Clone)]
-pub struct Binding(expr::Var, Val);
+pub struct Binding(expr::Var, expr::Val);
 
 // notation from paper: `< w >`
 #[derive(PartialEq, Eq, Clone)]
@@ -486,8 +520,10 @@ impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
 // e.g. `x:A(v)< T' >`
 // e.g. `x:A(v) := w`
 
+#[derive(Clone)]
 pub struct Parsed<X> { var: expr::Var, nonterm: NonTerm, input: Val, payload: X }
 
+#[derive(Clone)]
 pub enum AbstractNode<X> {
     Term(Term),
     Binding(Binding),
@@ -506,7 +542,24 @@ fn nonterminal_free<T>(v: &[AbstractNode<T>]) -> bool {
 
 pub struct Sentential(pub Vec<AbstractNode<()>>);
 
+#[derive(Clone)]
 pub struct Tree(pub Vec<AbstractNode<Tree>>);
+
+impl Tree {
+    pub fn extend_term(&mut self, term: Term) {
+        self.0.push(AbstractNode::Term(term));
+    }
+
+    pub fn extend_bind(&mut self, x: expr::Var, v: expr::Val) {
+        self.0.push(AbstractNode::Binding(Binding(x, v)));
+    }
+
+    pub fn extend_parsed(&mut self, x: expr::Var, nt: NonTerm, v: expr::Val, t: Tree) {
+        self.0.push(AbstractNode::Parse(Parsed {
+            var: x, nonterm: nt, input: v.into(), payload: t,
+        }));
+    }
+}
 
 // W : AbstractString
 // m : AbstractString that is nonterminal-free
