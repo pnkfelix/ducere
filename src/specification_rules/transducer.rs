@@ -1,7 +1,7 @@
 use crate::{expr, NonTerm, Term, Tree};
 use crate::transducer::{State, StateData, Transducer, Action};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct TransducerConfigFrame {
     call_context: State,
     env: expr::Env,
@@ -44,8 +44,8 @@ impl TransducerConfigFrame {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct TransducerConfig(Vec<TransducerConfigFrame>);
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) struct TransducerConfig(pub Vec<TransducerConfigFrame>);
 
 impl TransducerConfig {
     fn unspool(mut self) -> Option<(TransducerConfigFrame, Self)> {

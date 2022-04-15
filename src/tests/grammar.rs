@@ -1,10 +1,8 @@
 use crate::*;
+use super::*;
 
 pub(crate) fn right_side(s: &str) -> RegularRightSide {
     yakker::RegularRightSideParser::new().parse(s).unwrap()
-}
-pub(crate) fn input(s: &str) -> Vec<Term> {
-    s.chars().map(|c| Term::C(c)).collect()
 }
 
 #[test]

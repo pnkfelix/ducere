@@ -2,130 +2,7 @@
 
 use std::collections::HashSet;
 
-pub mod transducer {
-    use std::collections::{HashMap};
-    use crate::{Blackbox, NonTerm, Term};
-    use crate::expr::{Expr, Var}/*}*/;  // check out the (bad) error you get with that uncommented.
-    use crate::yakker;
-
-    pub enum Action {
-        Term(Term),
-        Constraint(Expr),
-        Binding(Var, Expr),
-        Blackbox(Blackbox, Expr),
-        NonTerm(Var, NonTerm, Expr),
-    }
-
-    pub struct Transducer {
-        pub(crate) states: HashMap<State, StateData>,
-    }
-
-    impl Transducer {
-        pub fn data(&self, state: State) -> &StateData {
-            &self.states[&state]
-        }
-    }
-
-    #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-    pub struct State(usize);
-
-    pub struct StateData {
-        label: String,
-        transitions: Vec<(Action, State)>,
-        calls: Vec<(Expr, State)>,
-        output_if_final: Option<Vec<NonTerm>>,
-    }
-
-    impl StateData {
-        pub fn label(&self) -> &str { &self.label }
-        pub fn transitions(&self) -> &[(Action, State)] {
-            &self.transitions
-        }
-        pub fn calls(&self) -> &[(Expr, State)] {
-            &self.calls
-        }
-        pub fn output_if_final(&self) -> Option<&[NonTerm]> {
-            self.output_if_final.as_ref().map(|v| &v[..])
-        }
-    }
-
-    struct StateBuilder(StateData);
-
-    impl StateBuilder {
-        fn final_state(nt: String) -> Self {
-            Self(StateData {
-                label: nt.clone(),
-                transitions: vec![],
-                calls: vec![],
-                output_if_final: Some(vec![NonTerm(nt)]),
-            })
-        }
-
-        fn labelled(l: String) -> Self {
-            Self(StateData {
-                label: l,
-                transitions: vec![],
-                calls: vec![],
-                output_if_final: None,
-            })
-        }
-
-        fn action(mut self, action: Action, next: State) -> Self {
-            self.0.transitions.push((action, next));
-            self
-        }
-
-        fn term(self, term: Term, next: State) -> Self {
-            self.action(Action::Term(term), next)
-        }
-
-        fn constraint(self, expr: Expr, next: State) -> Self {
-            self.action(Action::Constraint(expr), next)
-        }
-
-        fn binding(self, var: Var, expr: Expr, next: State) -> Self {
-            self.action(Action::Binding(var, expr), next)
-        }
-
-        fn non_term(self, var: Var, nt: NonTerm, expr: Expr, next: State) -> Self {
-            self.action(Action::NonTerm(var, nt, expr), next)
-        }
-
-        fn build(self) -> StateData {
-            self.0
-        }
-    }
-
-    pub fn fig_2_a() -> Transducer {
-        let s0 = State(0);
-        let s1 = State(1);
-        let s2 = State(2);
-        let s3 = State(3);
-        let d0 = StateBuilder::final_state(format!("int")).build();
-        let d1 = StateBuilder::labelled("1".into())
-            .constraint(yakker::ExprParser::new().parse("n == 0").unwrap(), s0)
-            .constraint(yakker::ExprParser::new().parse("n > 0").unwrap(), s2)
-            .build();
-        let d2 = StateBuilder::labelled("2".into())
-            .term(Term::C('0'), s3)
-            .term(Term::C('1'), s3)
-            .term(Term::C('2'), s3)
-            .term(Term::C('3'), s3)
-            .term(Term::C('4'), s3)
-            .term(Term::C('5'), s3)
-            .term(Term::C('6'), s3)
-            .term(Term::C('7'), s3)
-            .term(Term::C('8'), s3)
-            .term(Term::C('9'), s3)
-            .build();
-        let d3 = StateBuilder::labelled("3".into())
-            .binding(Var("n".into()), yakker::ExprParser::new().parse("n-1").unwrap(), s1)
-            .build();
-        Transducer {
-            states: vec![(s0, d0), (s1, d1), (s2, d2), (s3, d3)].into_iter().collect()
-        }
-    }
-}
+pub mod transducer;
 
 pub trait Recognizer {
     type Term;
@@ -315,7 +192,7 @@ pub mod expr {
         }
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Env(Vec<(Var, Val)>);
 
     impl Env {
@@ -491,7 +368,7 @@ impl Term {
 pub struct NonTerm(String);
 // #[derive(PartialEq, Eq, Clone, Debug)]
 // pub struct Var(String);
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Val(String);
 
 impl From<crate::expr::Val> for Val {
@@ -505,11 +382,11 @@ impl From<crate::expr::Val> for Val {
 }
 
 // notation from paper: `{x := v }`
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Binding(expr::Var, expr::Val);
 
 // notation from paper: `< w >`
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct BlackBox(String);
 
 impl From<&str> for Term { fn from(a: &str) -> Self { Self::S(a.into()) } }
@@ -520,10 +397,10 @@ impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
 // e.g. `x:A(v)< T' >`
 // e.g. `x:A(v) := w`
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Parsed<X> { var: expr::Var, nonterm: NonTerm, input: Val, payload: X }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum AbstractNode<X> {
     Term(Term),
     Binding(Binding),
@@ -542,7 +419,7 @@ fn nonterminal_free<T>(v: &[AbstractNode<T>]) -> bool {
 
 pub struct Sentential(pub Vec<AbstractNode<()>>);
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Tree(pub Vec<AbstractNode<Tree>>);
 
 impl Tree {
