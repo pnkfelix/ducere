@@ -389,6 +389,7 @@ pub struct Binding(expr::Var, expr::Val);
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct BlackBox(String);
 
+impl From<char> for Term { fn from(a: char) -> Self { Self::C(a.into()) } }
 impl From<&str> for Term { fn from(a: &str) -> Self { Self::S(a.into()) } }
 impl From<&str> for NonTerm { fn from(a: &str) -> Self { Self(a.into()) } }
 impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
@@ -398,7 +399,7 @@ impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
 // e.g. `x:A(v) := w`
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Parsed<X> { var: expr::Var, nonterm: NonTerm, input: Val, payload: X }
+pub struct Parsed<X> { var: Option<expr::Var>, nonterm: NonTerm, input: Val, payload: X }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum AbstractNode<X> {
@@ -431,7 +432,7 @@ impl Tree {
         self.0.push(AbstractNode::Binding(Binding(x, v)));
     }
 
-    pub fn extend_parsed(&mut self, x: expr::Var, nt: NonTerm, v: expr::Val, t: Tree) {
+    pub fn extend_parsed(&mut self, x: Option<expr::Var>, nt: NonTerm, v: expr::Val, t: Tree) {
         self.0.push(AbstractNode::Parse(Parsed {
             var: x, nonterm: nt, input: v.into(), payload: t,
         }));

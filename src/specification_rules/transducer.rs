@@ -59,8 +59,10 @@ impl TransducerConfigFrame {
         }
     }
 
-    fn match_return(&mut self, x: expr::Var, t: Tree, a: NonTerm, v: expr::Val, new_state: State) {
-        self.env.extend(x.clone(), (&t.leaves()[..]).into());
+    fn match_return(&mut self, x: Option<expr::Var>, t: Tree, a: NonTerm, v: expr::Val, new_state: State) {
+        if let Some(x) = x.clone() {
+            self.env.extend(x, (&t.leaves()[..]).into());
+        }
         self.tree.extend_parsed(x, a, v, t);
         self.curr = new_state;
     }
@@ -187,12 +189,12 @@ impl Transducer {
                     Action::NonTerm(x, nt, e) if returning.contains(nt) => (x, nt, e),
                     _ => continue,
                 };
-                let v = e.eval(&caller.env);
+                let v = if let Some(e) = e { e.eval(&caller.env) } else { ().into() };
                 let y_0 = expr::y_0();
                 if Some(&v) != tip.env.lookup(&y_0) {
                     continue;
                 }
-                assert_ne!(x, &y_0);
+                assert_ne!(x, &Some(y_0));
 
                 let mut caller = caller.clone();
                 caller.match_return(x.clone(), tip.tree.clone(), nt.clone(), v, state);

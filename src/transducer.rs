@@ -8,7 +8,31 @@ pub enum Action {
     Constraint(Expr),
     Binding(Var, Expr),
     Blackbox(Blackbox, Expr),
-    NonTerm(Var, NonTerm, Expr),
+
+    /// `x := A(e); but the common cases are otherwise unreferenced `x` and unit
+    /// expr, so we allow those to be omitted rather than force client to make
+    /// up inputs.
+    NonTerm(Option<Var>, NonTerm, Option<Expr>),
+}
+
+pub trait NonTermSpec {
+    fn components(self) -> (Option<Var>, NonTerm, Option<Expr>);
+}
+
+impl NonTermSpec for NonTerm {
+    fn components(self) -> (Option<Var>, NonTerm, Option<Expr>) { (None, self, None) }
+}
+
+impl NonTermSpec for (Var, NonTerm) {
+    fn components(self) -> (Option<Var>, NonTerm, Option<Expr>) { (Some(self.0), self.1, None) }
+}
+
+impl NonTermSpec for (Var, NonTerm, Expr) {
+    fn components(self) -> (Option<Var>, NonTerm, Option<Expr>) { (Some(self.0), self.1, Some(self.2)) }
+}
+
+impl NonTermSpec for (NonTerm, Expr) {
+    fn components(self) -> (Option<Var>, NonTerm, Option<Expr>) { (None, self.0, Some(self.1)) }
 }
 
 pub struct Transducer {
@@ -57,7 +81,7 @@ impl StateBuilder {
         })
     }
 
-    pub fn labelled(l: String) -> Self {
+   pub fn labelled(l: String) -> Self {
         Self(StateData {
             label: l,
             transitions: vec![],
@@ -71,8 +95,17 @@ impl StateBuilder {
         self
     }
 
-    pub fn term(self, term: Term, next: State) -> Self {
-        self.action(Action::Term(term), next)
+    pub fn term(self, term: impl Into<Term>, next: State) -> Self {
+        self.action(Action::Term(term.into()), next)
+    }
+
+    pub fn term_range(self, range_incl: (char, char), next: State) -> Self {
+        let mut s = self;
+        let (start, finis) = range_incl;
+        for c in start..=finis {
+            s = s.action(Action::Term(Term::C(c)), next);
+        }
+        s
     }
 
     pub fn constraint(self, expr: Expr, next: State) -> Self {
@@ -83,8 +116,14 @@ impl StateBuilder {
         self.action(Action::Binding(var, expr), next)
     }
 
-    pub fn non_term(self, var: Var, nt: NonTerm, expr: Expr, next: State) -> Self {
+    pub fn non_term(self, nt: impl NonTermSpec, next: State) -> Self {
+        let (var, nt, expr) = nt.components();
         self.action(Action::NonTerm(var, nt, expr), next)
+    }
+
+    pub fn call(mut self, expr: Expr, next: State) -> Self {
+        self.0.calls.push((expr, next));
+        self
     }
 
     pub fn build(self) -> StateData {

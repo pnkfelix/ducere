@@ -6,6 +6,10 @@ use crate::expr;
 use crate::specification_rules::transducer::{TransducerConfig};
 use crate::yakker;
 
+fn expr(s: &str) -> expr::Expr {
+    yakker::ExprParser::new().parse(s).unwrap()
+}
+
 pub fn fig_2_a() -> Transducer {
     let s0 = State(0);
     let s1 = State(1);
@@ -13,23 +17,14 @@ pub fn fig_2_a() -> Transducer {
     let s3 = State(3);
     let d0 = StateBuilder::final_state(format!("int")).build();
     let d1 = StateBuilder::labelled("1".into())
-        .constraint(yakker::ExprParser::new().parse("n == 0").unwrap(), s0)
-        .constraint(yakker::ExprParser::new().parse("n > 0").unwrap(), s2)
+        .constraint(expr("n == 0"), s0)
+        .constraint(expr("n > 0"), s2)
         .build();
     let d2 = StateBuilder::labelled("2".into())
-        .term(Term::C('0'), s3)
-        .term(Term::C('1'), s3)
-        .term(Term::C('2'), s3)
-        .term(Term::C('3'), s3)
-        .term(Term::C('4'), s3)
-        .term(Term::C('5'), s3)
-        .term(Term::C('6'), s3)
-        .term(Term::C('7'), s3)
-        .term(Term::C('8'), s3)
-        .term(Term::C('9'), s3)
+        .term_range(('0', '9'), s3)
         .build();
     let d3 = StateBuilder::labelled("3".into())
-        .binding(Var("n".into()), yakker::ExprParser::new().parse("n-1").unwrap(), s1)
+        .binding(Var("n".into()), expr("n-1"), s1)
         .build();
     Transducer {
         states: vec![(s0, d0), (s1, d1), (s2, d2), (s3, d3)].into_iter().collect()
@@ -53,4 +48,37 @@ fn imperative_fixed_width_integer() {
     let next = config.clone().map_tip(|frame|frame.with_curr(State(0)));
     assert_eq!(t.matches(config.clone(), &input("")), vec![(next.clone(), 0)]);
     assert_eq!(t.data(next.state()).output_if_final(), Some(["int".into()].as_slice()));
+}
+
+pub fn fig_2_b() -> Transducer {
+    let s0 = State(0);
+    let s1 = State(1);
+    let s2 = State(2);
+    let s3 = State(3);
+    let s4 = State(4);
+    let s5 = State(5);
+    let s6 = State(6);
+    let d0 = StateBuilder::final_state(format!("int")).build();
+    let d1 = StateBuilder::labelled("1".into())
+        .constraint(expr("n == 0"), s0)
+        .constraint(expr("n > 0"), s2)
+        .build();
+    let d2 = StateBuilder::labelled("2".into())
+        .call(Expr::Lit(().into()), s5)
+        .non_term(NonTerm("dig".into()), s3)
+        .build();
+    let d3 = StateBuilder::labelled("3".into())
+        .call(expr("n - 1"), s1)
+        .non_term((NonTerm("int".into()), expr("n - 1")), s4)
+        .build();
+    let d4 = StateBuilder::final_state(format!("int"))
+        .build();
+    let d5 = StateBuilder::labelled("5".into())
+        .term_range(('0', '9'), s6)
+        .build();
+    let d6 = StateBuilder::final_state(format!("dig"))
+        .build();
+    Transducer {
+        states: vec![(s0, d0), (s1, d1), (s2, d2), (s3, d3), (s4, d4), (s5, d5), (s6, d6)].into_iter().collect()
+    }
 }
