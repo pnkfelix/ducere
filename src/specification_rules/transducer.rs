@@ -169,12 +169,7 @@ impl Transducer {
         for &(ref expr, state) in r.calls() {
             let val = expr.eval(&tip.env);
             let y_0 = expr::y_0();
-            let next = TransducerConfigFrame {
-                call_context: state,
-                env: expr::Env::bind(y_0, val),
-                tree: Tree(vec![]),
-                curr: state,
-            };
+            let next = TransducerConfigFrame::call(state, y_0, &expr, val);
             accum.push((c.clone().respool(next), 0));
         }
 
