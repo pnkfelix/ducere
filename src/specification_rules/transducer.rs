@@ -9,9 +9,8 @@ pub(crate) struct TransducerConfigFrame {
     curr: State
 }
 
-#[cfg(test)]
 impl TransducerConfigFrame {
-    pub fn with_curr(&self, new_curr: State) -> Self {
+    pub(crate) fn with_curr(&self, new_curr: State) -> Self {
         let mut n = self.clone();
         n.curr = new_curr;
         n
@@ -22,7 +21,10 @@ impl TransducerConfigFrame {
         n.tree.extend_term(term);
         n
     }
+}
 
+#[cfg(test)]
+impl TransducerConfigFrame {
     pub fn with_bind(&self, var: expr::Var, val: expr::Val) -> Self {
         let mut n = self.clone();
         n.tree.extend_bind(var.clone(), val.clone());
@@ -91,6 +93,14 @@ impl TransducerConfig {
         self
     }
 
+    pub fn goto(self, s: State) -> Self {
+        self.map_tip(|frame|frame.with_curr(s))
+    }
+
+    pub fn term(self, t: Term) -> Self {
+        self.map_tip(|frame|frame.with_term(t))
+    }
+
     pub fn call(self, s: State, input: Option<(expr::Var, &expr::Expr, expr::Val)>) -> Self {
         if let Some((y_0, expr, val)) = input {
             self.respool(TransducerConfigFrame::call(s, y_0, expr, val))
@@ -100,7 +110,6 @@ impl TransducerConfig {
     }
 }
 
-#[cfg(test)]
 impl TransducerConfig {
     pub(crate) fn map_tip(self, f: impl FnOnce(TransducerConfigFrame) -> TransducerConfigFrame) -> Self {
         if let Some((tip, s)) = self.unspool() {
@@ -109,7 +118,10 @@ impl TransducerConfig {
             TransducerConfig(vec![])
         }
     }
+}
 
+#[cfg(test)]
+impl TransducerConfig {
     pub(crate) fn peek(&self) -> &TransducerConfigFrame {
         self.0.iter().rev().peekable().peek().map(|x|*x).unwrap()
     }
