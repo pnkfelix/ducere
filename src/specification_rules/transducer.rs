@@ -90,6 +90,14 @@ impl TransducerConfig {
         self.0.push(c);
         self
     }
+
+    pub fn call(self, s: State, input: Option<(expr::Var, &expr::Expr, expr::Val)>) -> Self {
+        if let Some((y_0, expr, val)) = input {
+            self.respool(TransducerConfigFrame::call(s, y_0, expr, val))
+        } else {
+            self.respool(TransducerConfigFrame::call(s, expr::y_0(), &().into(), ().into()))
+        }
+    }
 }
 
 #[cfg(test)]
