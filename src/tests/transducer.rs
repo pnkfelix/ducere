@@ -82,3 +82,16 @@ pub fn fig_2_b() -> Transducer {
         states: vec![(s0, d0), (s1, d1), (s2, d2), (s3, d3), (s4, d4), (s5, d5), (s6, d6)].into_iter().collect()
     }
 }
+
+#[test]
+fn functional_fixed_width_integer() {
+    let t = fig_2_b();
+    let one_digit = expr::Env::bind("n".into(), 1.into());
+    let config = TransducerConfig::fresh(State(1), one_digit);
+    let next = config.clone().map_tip(|frame|frame.with_curr(State(2)));
+    assert_eq!(t.matches(config.clone(), &input("1")), vec![(next.clone(), 0)]);
+    let config = next;
+    let next = config.clone().call(State(5), None);
+    assert_eq!(t.matches(config.clone(), &input("1")), vec![(next.clone(), 0)]);
+
+}
