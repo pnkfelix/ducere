@@ -10,28 +10,29 @@ pub(crate) struct TransducerConfigFrame {
 }
 
 impl TransducerConfigFrame {
-    pub(crate) fn with_curr(&self, new_curr: State) -> Self {
+    fn with_curr(&self, new_curr: State) -> Self {
         let mut n = self.clone();
         n.curr = new_curr;
         n
     }
 
-    pub(crate) fn with_term(&self, term: Term) -> Self {
+    fn with_term(&self, term: Term) -> Self {
         let mut n = self.clone();
         n.tree.extend_term(term);
         n
     }
-}
 
-#[cfg(test)]
-impl TransducerConfigFrame {
-    pub(crate) fn with_bind(&self, var: expr::Var, val: expr::Val) -> Self {
+    fn with_bind(&self, var: expr::Var, val: expr::Val) -> Self {
         let mut n = self.clone();
         n.tree.extend_bind(var.clone(), val.clone());
         n.env.extend(var, val);
         n
     }
+}
 
+
+#[cfg(test)]
+impl TransducerConfigFrame {
     pub(crate) fn tree(&self) -> &Tree {
         &self.tree
     }
@@ -103,6 +104,10 @@ impl TransducerConfig {
 
     pub fn term(self, t: Term) -> Self {
         self.map_tip(|frame|frame.with_term(t))
+    }
+
+    pub fn bind(self, x: expr::Var, v: expr::Val) -> Self {
+        self.map_tip(|frame|frame.with_bind(x, v))
     }
 
     pub fn call(self, s: State, input: Option<(expr::Var, &expr::Expr, expr::Val)>) -> Self {
