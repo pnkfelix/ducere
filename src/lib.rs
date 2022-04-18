@@ -372,6 +372,7 @@ pub struct NonTerm(String);
 pub struct Val(String);
 
 impl From<crate::expr::Val> for Val {
+    #[track_caller]
     fn from(v: crate::expr::Val) -> Val {
         if let crate::expr::Val::String(s) = v {
             Val(s)
@@ -399,7 +400,7 @@ impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
 // e.g. `x:A(v) := w`
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Parsed<X> { var: Option<expr::Var>, nonterm: NonTerm, input: Val, payload: X }
+pub struct Parsed<X> { var: Option<expr::Var>, nonterm: NonTerm, input: expr::Val, payload: X }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum AbstractNode<X> {
@@ -425,7 +426,7 @@ pub struct Tree(pub Vec<AbstractNode<Tree>>);
 
 impl Tree {
     pub fn extend_term(&mut self, term: Term) {
-        self.0.push(AbstractNode::Term(term));
+       self.0.push(AbstractNode::Term(term));
     }
 
     pub fn extend_bind(&mut self, x: expr::Var, v: expr::Val) {
@@ -436,6 +437,12 @@ impl Tree {
         self.0.push(AbstractNode::Parse(Parsed {
             var: x, nonterm: nt, input: v.into(), payload: t,
         }));
+    }
+}
+
+impl From<&str> for Tree {
+    fn from(s: &str) -> Tree {
+        Tree(s.chars().map(|c|AbstractNode::Term(Term::C(c))).collect())
     }
 }
 
@@ -467,7 +474,7 @@ impl AbstractString {
     }
 
     // Strings(W, A, v) from paper
-    pub fn strings(&self, a: NonTerm, v: Val) -> Vec<&str> {
+    pub fn strings(&self, a: NonTerm, v: expr::Val) -> Vec<&str> {
         let mut accum: Vec<&str> = Vec::new();
         for n in &self.0 {
             if let AbstractNode::Parse(p) = n {
