@@ -207,7 +207,8 @@ impl Transducer {
         // Call transitions, i.e. S-Call
         for &(ref expr, state) in r.calls() {
             let val = expr.eval(&tip.env);
-            let y_0 = expr::y_0();
+            let callee = self.data(state);
+            let y_0 = callee.formal_param().cloned().unwrap_or(expr::y_0());
             let next = TransducerConfigFrame::call(state, y_0, &expr, val);
             accum.push((c.clone().respool(next), 0));
         }

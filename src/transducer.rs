@@ -51,6 +51,7 @@ pub struct State(usize);
 #[derive(Debug)]
 pub struct StateData {
     label: String,
+    param_name: Option<Var>,
     transitions: Vec<(Action, State)>,
     calls: Vec<(Expr, State)>,
     output_if_final: Option<Vec<NonTerm>>,
@@ -58,6 +59,7 @@ pub struct StateData {
 
 impl StateData {
     pub fn label(&self) -> &str { &self.label }
+    pub fn formal_param(&self) -> Option<&Var> { self.param_name.as_ref() }
     pub fn transitions(&self) -> &[(Action, State)] {
         &self.transitions
     }
@@ -75,6 +77,7 @@ impl StateBuilder {
     pub fn final_state(nt: String) -> Self {
         Self(StateData {
             label: nt.clone(),
+            param_name: None,
             transitions: vec![],
             calls: vec![],
             output_if_final: Some(vec![NonTerm(nt)]),
@@ -84,6 +87,17 @@ impl StateBuilder {
     pub fn labelled(l: String) -> Self {
         Self(StateData {
             label: l,
+            param_name: None,
+            transitions: vec![],
+            calls: vec![],
+            output_if_final: None,
+        })
+    }
+
+    pub fn parameterized(l: String, var: Var) -> Self {
+        Self(StateData {
+            label: l,
+            param_name: Some(var),
             transitions: vec![],
             calls: vec![],
             output_if_final: None,

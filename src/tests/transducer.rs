@@ -59,7 +59,7 @@ pub fn fig_2_b() -> Transducer {
     let s5 = State(5);
     let s6 = State(6);
     let d0 = StateBuilder::final_state(format!("int")).build();
-    let d1 = StateBuilder::labelled("1".into())
+    let d1 = StateBuilder::parameterized("1".into(), "n".into())
         .constraint(expr("n == 0"), s0)
         .constraint(expr("n > 0"), s2)
         .build();
@@ -100,7 +100,7 @@ fn functional_fixed_width_integer() {
     let next = config.clone().return_to(None, "1".into(), "dig".into(), ().into(), State(3));
     assert_eq!(t.matches(config.clone(), &input("")), vec![(next.clone(), 0)]);
     let config = next;
-    let next = config.clone().call(State(1), Some((expr::y_0(), &expr("n-1"), 0.into())));
+    let next = config.clone().call(State(1), Some(("n".into(), &expr("n-1"), 0.into())));
     assert_eq!(t.matches(config.clone(), &input("")), vec![(next.clone(), 0)]);
 
 }
