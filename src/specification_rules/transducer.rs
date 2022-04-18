@@ -16,7 +16,7 @@ impl TransducerConfigFrame {
         n
     }
 
-    pub fn with_term(&self, term: Term) -> Self {
+    pub(crate) fn with_term(&self, term: Term) -> Self {
         let mut n = self.clone();
         n.tree.extend_term(term);
         n
@@ -108,6 +108,25 @@ impl TransducerConfig {
             self.respool(TransducerConfigFrame::call(s, expr::y_0(), &().into(), ().into()))
         }
     }
+
+    pub fn return_to(self, x: Option<expr::Var>, tree: Tree, nt: NonTerm, v: expr::Val, next: State) -> Self {
+        let mut s = self;
+        s.0.pop();
+        s = s.map_tip(|mut frame| {
+            // dbg!((&frame.tree, &v));
+            frame.tree.extend_parsed(x.clone(), nt, v, tree.clone()); 
+            // dbg!(&frame.tree);
+            if let Some(x) = x {
+                let leaves: expr::Val = tree.leaves().as_slice().into();
+                dbg!(&leaves);
+                frame.env.extend(x, leaves);
+            }
+            frame.with_curr(next)
+        });
+        s
+    }
+
+
 }
 
 impl TransducerConfig {

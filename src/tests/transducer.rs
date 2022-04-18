@@ -96,5 +96,11 @@ fn functional_fixed_width_integer() {
     let config = next;
     let next = config.clone().goto(State(6)).term('1'.into());
     assert_eq!(t.matches(config.clone(), &input("1")), vec![(next.clone(), 1)]);
+    let config = next;
+    let next = config.clone().return_to(None, "1".into(), "dig".into(), ().into(), State(3));
+    assert_eq!(t.matches(config.clone(), &input("")), vec![(next.clone(), 0)]);
+    let config = next;
+    let next = config.clone().call(State(1), Some((expr::y_0(), &expr("n-1"), 0.into())));
+    assert_eq!(t.matches(config.clone(), &input("")), vec![(next.clone(), 0)]);
 
 }
