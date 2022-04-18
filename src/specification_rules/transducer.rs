@@ -25,11 +25,15 @@ impl TransducerConfigFrame {
 
 #[cfg(test)]
 impl TransducerConfigFrame {
-    pub fn with_bind(&self, var: expr::Var, val: expr::Val) -> Self {
+    pub(crate) fn with_bind(&self, var: expr::Var, val: expr::Val) -> Self {
         let mut n = self.clone();
         n.tree.extend_bind(var.clone(), val.clone());
         n.env.extend(var, val);
         n
+    }
+
+    pub(crate) fn tree(&self) -> &Tree {
+        &self.tree
     }
 }
 
@@ -225,7 +229,7 @@ impl Transducer {
                     _ => continue,
                 };
                 let v = if let Some(e) = e { e.eval(&caller.env) } else { ().into() };
-                let y_0 = expr::y_0();
+                let y_0 = self.data(tip.call_context).formal_param().cloned().unwrap_or(expr::y_0());
                 if Some(&v) != tip.env.lookup(&y_0) {
                     continue;
                 }
