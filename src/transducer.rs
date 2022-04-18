@@ -81,7 +81,7 @@ impl StateBuilder {
         })
     }
 
-   pub fn labelled(l: String) -> Self {
+    pub fn labelled(l: String) -> Self {
         Self(StateData {
             label: l,
             transitions: vec![],
