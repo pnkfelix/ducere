@@ -25,5 +25,8 @@ fn lexing_basics() {
     assert!(lex_oks(r##"a r#[b b]# c"##).eq(strings(&["a", " ", "b b", " ", "c"])));
 
     assert!(lex_oks(r##"a r##[b [#] b]## c"##)
-            .eq(strings(&["a", " ", "b [#] b", " ", "c"])))
+            .eq(strings(&["a", " ", "b [#] b", " ", "c"])));
+
+    assert!(lex_oks(r##"a r##[b #### [#] #### b]## c"##)
+            .eq(strings(&["a", " ", "b #### [#] #### b", " ", "c"])));
 }
