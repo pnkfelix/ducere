@@ -183,6 +183,7 @@ struct QuoteOpen {
 
 /// after lexing 'r' '#'^k OPEN, then we are seeking CLOSE '#'^k to end the
 /// raw-quoted content.
+#[derive(Debug)]
 struct QuoteClose {
     sharp_seek: usize,
     sharp_count: usize,
@@ -340,6 +341,7 @@ impl<'input> Lexer<'input> {
 
                     buf.push(c);
                     for _ in 0..q.sharp_count { buf.push('#'); }
+                    q.sharp_count = 0;
                     break;
                 }
             } else {
