@@ -250,16 +250,16 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn read_raw_quotation(&mut self, mut ic: (usize, char), mut p: char) -> Option<<Self as Iterator>::Item> {
+    fn read_raw_quotation(&mut self, ic: (usize, char), mut p: char) -> Option<<Self as Iterator>::Item> {
         let (i, c) = ic;
         let spanned_start = i;
         assert_eq!(c, 'r');
         let mut sharp_count = 0;
 
         // First: count how many sharps we are matching.
-        loop {
-            assert_eq!(p, '#');
-            ic = self.chars.next().unwrap();
+        while p == '#' {
+            // assert_eq!(p, '#');
+            let ic = self.chars.next().unwrap();
             let c = ic.1;
             assert_eq!(c, p);
             sharp_count += 1;
@@ -268,11 +268,6 @@ impl<'input> Lexer<'input> {
                 None => break,
                 Some(p_) => {
                     p = p_;
-                    if p_ == '#' {
-                        continue;
-                    } else {
-                        break;
-                    }
                 }
             }
         }
@@ -281,7 +276,7 @@ impl<'input> Lexer<'input> {
         // now: c is either 'r' or '#', and p is the base quotation delimiter.
         let base_open_delim;
         let end_delim_set = if let Some(end) = raw_quoted_opener(p) {
-            ic = self.chars.next().unwrap();
+            let ic = self.chars.next().unwrap();
             let c = ic.1;
             assert_eq!(c, p);
             base_open_delim = c;

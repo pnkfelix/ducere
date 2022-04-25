@@ -29,4 +29,10 @@ fn lexing_basics() {
 
     assert!(lex_oks(r##"a r##[b #### [#] #### b]## c"##)
             .eq(strings(&["a", " ", "b #### [#] #### b", " ", "c"])));
+
+    assert!(lex_oks(r##"a r#[A]#r#(B)#r#{C}#r#"D"#r#'E'#r#<F>#r#|G|#r#`H`# c"##)
+            .eq(strings(&["a", " ", "A", "B", "C", "D", "E", "F", "G", "H", " ", "c"])));
+
+    assert!(lex_oks(r##"a r[AB]r(CD)r{EF}r"GH"r'IJ'r#<KL>#r#|MN|#r#`OP`# c"##)
+            .eq(strings(&["a", " ", "AB", "CD", "EF", "GH", "IJ", "KL", "MN", "OP", " ", "c"])));
 }
