@@ -2,7 +2,12 @@
 
 use std::collections::HashSet;
 
+pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
+
+mod luthor;
 pub mod transducer;
+
+pub use luthor::{Lexer, LexicalError, Tok, Word, Quoted, Whitespace};
 
 pub trait Recognizer {
     type Term;
