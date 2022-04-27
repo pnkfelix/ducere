@@ -31,16 +31,20 @@ use std::iter::Peekable;
 use std::str::CharIndices;
 
 use crate::Spanned;
-use derive_more::{AsRef, Into};
+use derive_more::{AsRef};
 
-#[derive(PartialEq, Eq, Debug, AsRef, Into)]
-pub struct Ident(String);
-#[derive(PartialEq, Eq, Debug, AsRef, Into)]
-pub struct Numeric(String);
-#[derive(PartialEq, Eq, Debug, AsRef, Into)]
-pub struct Operative(String);
+#[derive(PartialEq, Eq, Debug, AsRef)]
+pub struct Ident<S>(S);
+#[derive(PartialEq, Eq, Debug, AsRef)]
+pub struct Numeric<S>(S);
+#[derive(PartialEq, Eq, Debug, AsRef)]
+pub struct Operative<S>(S);
 
-impl AsRef<str> for Ident { fn as_ref(&self) -> &str { self.0.as_ref() } }
+impl AsRef<str> for Ident<String> { fn as_ref(&self) -> &str { self.0.as_ref() } }
+
+impl From<Operative<String>> for String { fn from(x: Operative<String>) -> String { x.0 } }
+impl From<Numeric<String>> for String { fn from(x: Numeric<String>) -> String { x.0 } }
+impl From<Ident<String>> for String { fn from(x: Ident<String>) -> String { x.0 } }
 
 trait IsOperative { fn is_operative(self) -> bool; }
 impl IsOperative for char {
@@ -50,13 +54,13 @@ impl IsOperative for char {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum Word {
-    Op(Operative),
-    Num(Numeric),
-    Id(Ident),
+pub enum Word<S> {
+    Op(Operative<S>),
+    Num(Numeric<S>),
+    Id(Ident<S>),
 }
 
-impl AsRef<String> for Word {
+impl AsRef<String> for Word<String> {
     fn as_ref(&self) -> &String {
         match self {
             Word::Op(x) => x.as_ref(),
@@ -66,8 +70,8 @@ impl AsRef<String> for Word {
     }
 }
 
-impl From<Word> for String {
-    fn from(w: Word) -> String {
+impl From<Word<String>> for String {
+    fn from(w: Word<String>) -> String {
         match w {
             Word::Op(x) => x.into(),
             Word::Num(x) => x.into(),
@@ -76,24 +80,26 @@ impl From<Word> for String {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, AsRef, Into)]
-pub struct Whitespace(String);
+#[derive(PartialEq, Eq, Debug, AsRef)]
+pub struct Whitespace<S>(S);
+
+impl From<Whitespace<String>> for String { fn from(x: Whitespace<String>) -> String { x.0 } }
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Delims(char, char);
 
 #[derive(PartialEq, Eq, Debug, AsRef)]
-pub struct Quoted {
+pub struct Quoted<S> {
     // If None, then htis is not a raw-string
     // If Some, then holds the number of sharps between the 'r' and the oepn delimiter.
     pub sharp_count: Option<usize>,
     pub delim: Delims,
     #[as_ref]
-    pub content: String,
+    pub content: S,
 }
 
-impl From<Quoted> for String {
-    fn from(q: Quoted) -> String { q.content }
+impl From<Quoted<String>> for String {
+    fn from(q: Quoted<String>) -> String { q.content }
 }
 
 fn simple_delimiter(c: char) -> Option<Vec<char>> {
@@ -124,13 +130,13 @@ fn raw_quoted_opener(c: char) -> Option<Vec<char>> {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum Tok {
-    Word(Word),
-    Quote(Quoted),
-    Space(Whitespace),
+pub enum Tok<S> {
+    Word(Word<S>),
+    Quote(Quoted<S>),
+    Space(Whitespace<S>),
 }
 
-impl AsRef<String> for Tok {
+impl AsRef<String> for Tok<String> {
     fn as_ref(&self) -> &String {
         match self {
             Tok::Word(x) => x.as_ref(),
@@ -140,8 +146,8 @@ impl AsRef<String> for Tok {
     }
 }
 
-impl From<Tok> for String {
-    fn from(tok: Tok) -> String {
+impl From<Tok<String>> for String {
+    fn from(tok: Tok<String>) -> String {
         match tok {
             Tok::Word(x) => x.into(),
             Tok::Quote(x) => x.into(),
@@ -211,7 +217,7 @@ impl R {
 }
 
 impl R {
-    fn finalize(&self, buf: String) -> Result<Tok, LexicalError> {
+    fn finalize(&self, buf: String) -> Result<Tok<String>, LexicalError> {
         match self {
             R::WordOp => Ok(Tok::Word(Word::Op(Operative(buf)))),
             R::WordNum => Ok(Tok::Word(Word::Num(Numeric(buf)))),
@@ -350,7 +356,7 @@ impl<'input> Lexer<'input> {
 }
 
 impl<'input> Iterator for Lexer<'input> {
-    type Item = Spanned<Tok, usize, LexicalError>;
+    type Item = Spanned<Tok<String>, usize, LexicalError>;
     fn next(&mut self) -> Option<Self::Item> {
         let (i, c): (usize, char) = match self.chars.next() {
             Some((i, c)) => (i,c),
