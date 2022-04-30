@@ -60,12 +60,12 @@ pub enum Word<S> {
     Id(Ident<S>),
 }
 
-impl AsRef<String> for Word<String> {
-    fn as_ref(&self) -> &String {
+impl<IS> AsRef<str> for Word<IS> where IS: AsRef<str> {
+    fn as_ref(&self) -> &str {
         match self {
-            Word::Op(x) => x.as_ref(),
-            Word::Num(x) => x.as_ref(),
-            Word::Id(x) => x.as_ref(),
+            Word::Op(x) => x.as_ref().as_ref(),
+            Word::Num(x) => x.as_ref().as_ref(),
+            Word::Id(x) => x.as_ref().as_ref(),
         }
     }
 }
@@ -136,12 +136,12 @@ pub enum Tok<S> {
     Space(Whitespace<S>),
 }
 
-impl AsRef<str> for Tok<String> {
+impl<IS> AsRef<str> for Tok<IS> where IS: AsRef<str>{
     fn as_ref(&self) -> &str {
         match self {
-            Tok::Word(x) => x.as_ref(),
-            Tok::Quote(x) => x.as_ref(),
-            Tok::Space(x) => x.as_ref(),
+            Tok::Word(x) => x.as_ref().as_ref(),
+            Tok::Quote(x) => x.as_ref().as_ref(),
+            Tok::Space(x) => x.as_ref().as_ref(),
         }
     }
 }
