@@ -32,6 +32,7 @@ use std::str::CharIndices;
 
 use crate::Spanned;
 use derive_more::{AsRef};
+use unicode_brackets::UnicodeBrackets;
 
 #[derive(PartialEq, Eq, Debug, AsRef)]
 pub struct Ident<S>(S);
@@ -79,6 +80,12 @@ impl<IS> From<Word<IS>> for String where IS: Into<String> {
         }
     }
 }
+
+#[derive(PartialEq, Eq, Debug, AsRef)]
+pub struct Bracket<S>(S);
+
+impl<IS> From<Bracket<IS>> for String where IS: Into<String> { fn from(x: Bracket<IS>) -> String { x.0.into() } }
+
 
 #[derive(PartialEq, Eq, Debug, AsRef)]
 pub struct Whitespace<S>(S);
@@ -131,6 +138,7 @@ fn raw_quoted_opener(c: char) -> Option<Vec<char>> {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum Tok<S> {
+    Bracket(Bracket<S>),
     Word(Word<S>),
     Quote(Quoted<S>),
     Space(Whitespace<S>),
@@ -139,6 +147,7 @@ pub enum Tok<S> {
 impl<IS> AsRef<str> for Tok<IS> where IS: AsRef<str>{
     fn as_ref(&self) -> &str {
         match self {
+            Tok::Bracket(x) => x.as_ref().as_ref(),
             Tok::Word(x) => x.as_ref().as_ref(),
             Tok::Quote(x) => x.as_ref().as_ref(),
             Tok::Space(x) => x.as_ref().as_ref(),
@@ -149,7 +158,8 @@ impl<IS> AsRef<str> for Tok<IS> where IS: AsRef<str>{
 impl<IS> From<Tok<IS>> for String where IS: Into<String> {
     fn from(tok: Tok<IS>) -> String {
         match tok {
-            Tok::Word(x) => x.into(),
+            Tok::Bracket(x) => x.into(),
+            Tok::Word(x) => x.into(), 
             Tok::Quote(x) => x.into(),
             Tok::Space(x) => x.into(),
         }
@@ -177,6 +187,7 @@ enum R {
     WordOp,
     WordNum,
     WordId,
+    Bracket,
     Space,
 }
 
@@ -204,10 +215,13 @@ impl R {
         if c.is_numeric() { R::WordNum }
         else if c.is_alphabetic() { R::WordId }
         else if c.is_whitespace() { R::Space }
+        else if c.is_open_bracket() || c.is_close_bracket() { R::Bracket }
         else { R::WordOp }
     }
     fn action(&self, p: char) -> RegAction {
         match self {
+            // every bracket is its own token; we don't merge sequences of brackets into one token.
+            R::Bracket => { RegAction::Complete }
             R::WordNum => if p.is_alphanumeric() { RegAction::Continue } else { RegAction::Complete }
             R::WordId => if p.is_alphanumeric() { RegAction::Continue } else { RegAction::Complete }
             R::WordOp => if p.is_operative() { RegAction::Continue } else { RegAction::Complete }
@@ -219,6 +233,10 @@ impl R {
 impl R {
     fn finalize(&self, buf: String) -> Result<Tok<String>, LexicalError> {
         match self {
+            R::Bracket => {
+                assert_eq!(buf.len(), 1);
+                Ok(Tok::Bracket(Bracket(buf)))
+            }
             R::WordOp => Ok(Tok::Word(Word::Op(Operative(buf)))),
             R::WordNum => Ok(Tok::Word(Word::Num(Numeric(buf)))),
             R::WordId => Ok(Tok::Word(Word::Id(Ident(buf)))),

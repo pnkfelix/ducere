@@ -18,6 +18,10 @@ fn lexing_basics() {
     assert!(lex_oks("a").eq(strings(&["a"])));
     assert!(lex_oks("ab").eq(strings(&["ab"])));
     assert!(lex_oks("a b").eq(strings(&["a", " ", "b"])));
+    assert!(lex_oks("(a b)").eq(strings(&["(", "a", " ", "b", ")"])));
+    assert!(lex_oks("(a b").eq(strings(&["(", "a", " ", "b"])));
+    assert!(lex_oks("((a b").eq(strings(&["(", "(", "a", " ", "b"])));
+    assert!(lex_oks("([{a b").eq(strings(&["(", "[", "{", "a", " ", "b"])));
     assert!(lex_oks(r##"a b"##).eq(strings(&["a", " ", "b"])));
     assert!(lex_oks(r##"a b c"##).eq(strings(&["a", " ", "b", " ", "c"])));
     assert!(lex_oks(r##"a r#"b"# c"##).eq(strings(&["a", " ", "b", " ", "c"])));

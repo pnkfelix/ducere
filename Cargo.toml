@@ -12,3 +12,4 @@ lalrpop = "0.19.7"
 lalrpop-util = { version="0.19.7", features = ["lexer"] }
 regex = "1"
 derive_more = "0.99.17"
+unicode-brackets = "0.1.1"
