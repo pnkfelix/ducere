@@ -42,9 +42,9 @@ pub struct Operative<S>(S);
 
 impl AsRef<str> for Ident<String> { fn as_ref(&self) -> &str { self.0.as_ref() } }
 
-impl From<Operative<String>> for String { fn from(x: Operative<String>) -> String { x.0 } }
-impl From<Numeric<String>> for String { fn from(x: Numeric<String>) -> String { x.0 } }
-impl From<Ident<String>> for String { fn from(x: Ident<String>) -> String { x.0 } }
+impl<IS: Into<String>> From<Operative<IS>> for String { fn from(x: Operative<IS>) -> String { x.0.into() } }
+impl<IS: Into<String>> From<Numeric<IS>> for String { fn from(x: Numeric<IS>) -> String { x.0.into() } }
+impl<IS: Into<String>> From<Ident<IS>> for String { fn from(x: Ident<IS>) -> String { x.0.into() } }
 
 trait IsOperative { fn is_operative(self) -> bool; }
 impl IsOperative for char {
@@ -70,8 +70,8 @@ impl AsRef<String> for Word<String> {
     }
 }
 
-impl From<Word<String>> for String {
-    fn from(w: Word<String>) -> String {
+impl<IS> From<Word<IS>> for String where IS: Into<String> {
+    fn from(w: Word<IS>) -> String {
         match w {
             Word::Op(x) => x.into(),
             Word::Num(x) => x.into(),
@@ -83,7 +83,7 @@ impl From<Word<String>> for String {
 #[derive(PartialEq, Eq, Debug, AsRef)]
 pub struct Whitespace<S>(S);
 
-impl From<Whitespace<String>> for String { fn from(x: Whitespace<String>) -> String { x.0 } }
+impl<IS> From<Whitespace<IS>> for String where IS: Into<String> { fn from(x: Whitespace<IS>) -> String { x.0.into() } }
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Delims(char, char);
@@ -98,8 +98,8 @@ pub struct Quoted<S> {
     pub content: S,
 }
 
-impl From<Quoted<String>> for String {
-    fn from(q: Quoted<String>) -> String { q.content }
+impl<IS: Into<String>> From<Quoted<IS>> for String {
+    fn from(q: Quoted<IS>) -> String { q.content.into() }
 }
 
 fn simple_delimiter(c: char) -> Option<Vec<char>> {
@@ -136,8 +136,8 @@ pub enum Tok<S> {
     Space(Whitespace<S>),
 }
 
-impl AsRef<String> for Tok<String> {
-    fn as_ref(&self) -> &String {
+impl AsRef<str> for Tok<String> {
+    fn as_ref(&self) -> &str {
         match self {
             Tok::Word(x) => x.as_ref(),
             Tok::Quote(x) => x.as_ref(),
@@ -146,8 +146,8 @@ impl AsRef<String> for Tok<String> {
     }
 }
 
-impl From<Tok<String>> for String {
-    fn from(tok: Tok<String>) -> String {
+impl<IS> From<Tok<IS>> for String where IS: Into<String> {
+    fn from(tok: Tok<IS>) -> String {
         match tok {
             Tok::Word(x) => x.into(),
             Tok::Quote(x) => x.into(),
