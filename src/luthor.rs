@@ -34,11 +34,11 @@ use crate::Spanned;
 use derive_more::{AsRef};
 use unicode_brackets::UnicodeBrackets;
 
-#[derive(PartialEq, Eq, Debug, AsRef)]
+#[derive(Clone, PartialEq, Eq, Debug, AsRef)]
 pub struct Ident<S>(S);
-#[derive(PartialEq, Eq, Debug, AsRef)]
+#[derive(Clone, PartialEq, Eq, Debug, AsRef)]
 pub struct Numeric<S>(S);
-#[derive(PartialEq, Eq, Debug, AsRef)]
+#[derive(Clone, PartialEq, Eq, Debug, AsRef)]
 pub struct Operative<S>(S);
 
 impl AsRef<str> for Ident<String> { fn as_ref(&self) -> &str { self.0.as_ref() } }
@@ -54,7 +54,7 @@ impl IsOperative for char {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Word<S> {
     Op(Operative<S>),
     Num(Numeric<S>),
@@ -92,10 +92,10 @@ pub struct Whitespace<S>(S);
 
 impl<IS> From<Whitespace<IS>> for String where IS: Into<String> { fn from(x: Whitespace<IS>) -> String { x.0.into() } }
 
-#[derive(PartialEq, Eq, Debug)]
-pub struct Delims(char, char);
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Delims(pub char, pub char);
 
-#[derive(PartialEq, Eq, Debug, AsRef)]
+#[derive(Clone, PartialEq, Eq, Debug, AsRef)]
 pub struct Quoted<S> {
     // If None, then htis is not a raw-string
     // If Some, then holds the number of sharps between the 'r' and the oepn delimiter.
@@ -136,7 +136,7 @@ fn raw_quoted_opener(c: char) -> Option<Vec<char>> {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TokKind {
     Bracket,
     Word(Word<()>),
@@ -144,8 +144,10 @@ pub enum TokKind {
     Space,
 }
 
-#[derive(PartialEq, Eq, Debug)]
-pub struct Tok<S>(TokKind, S);
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Tok<S>(pub TokKind, pub S);
+
+pub type TokStr<'a> = Tok<&'a str>;
 
 impl Tok<(usize, usize)> {
     fn repackage<'a>(self, data: &'a str) -> (usize, Tok<&'a str>, usize) {
