@@ -137,33 +137,31 @@ fn raw_quoted_opener(c: char) -> Option<Vec<char>> {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum Tok<S> {
-    Bracket(Bracket<S>),
-    Word(Word<S>),
-    Quote(Quoted<S>),
-    Space(Whitespace<S>),
+pub enum TokKind {
+    Bracket,
+    Word(Word<()>),
+    Quote(Quoted<()>),
+    Space,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct Tok<S>(TokKind, S);
+
+impl Tok<(usize, usize)> {
+    fn repackage<'a>(self, data: &'a str) -> (usize, Tok<&'a str>, usize) {
+        let (i, j) = self.1;
+        dbg!((i, Tok(self.0, &data[i..=j]), j))
+    }
 }
 
 impl<IS> AsRef<str> for Tok<IS> where IS: AsRef<str>{
     fn as_ref(&self) -> &str {
-        match self {
-            Tok::Bracket(x) => x.as_ref().as_ref(),
-            Tok::Word(x) => x.as_ref().as_ref(),
-            Tok::Quote(x) => x.as_ref().as_ref(),
-            Tok::Space(x) => x.as_ref().as_ref(),
-        }
+        self.1.as_ref()
     }
 }
 
 impl<IS> From<Tok<IS>> for String where IS: Into<String> {
-    fn from(tok: Tok<IS>) -> String {
-        match tok {
-            Tok::Bracket(x) => x.into(),
-            Tok::Word(x) => x.into(), 
-            Tok::Quote(x) => x.into(),
-            Tok::Space(x) => x.into(),
-        }
-    }
+    fn from(tok: Tok<IS>) -> String { tok.1.into() }
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -173,12 +171,13 @@ pub enum LexicalError {
 }
 
 pub struct Lexer<'input> {
+    input: &'input str,
     chars: Peekable<CharIndices<'input>>,
 }
 
 impl<'input> Lexer<'input> {
     pub fn new(input: &'input str) -> Self {
-        Lexer { chars: input.char_indices().peekable()}
+        Lexer { input, chars: input.char_indices().peekable()}
     }
 }
 
@@ -231,44 +230,44 @@ impl R {
 }
 
 impl R {
-    fn finalize(&self, buf: String) -> Result<Tok<String>, LexicalError> {
+    fn finalize(&self, span: (usize, usize)) -> Result<Tok<(usize, usize)>, LexicalError> {
         match self {
-            R::Bracket => {
-                assert_eq!(buf.len(), 1);
-                Ok(Tok::Bracket(Bracket(buf)))
-            }
-            R::WordOp => Ok(Tok::Word(Word::Op(Operative(buf)))),
-            R::WordNum => Ok(Tok::Word(Word::Num(Numeric(buf)))),
-            R::WordId => Ok(Tok::Word(Word::Id(Ident(buf)))),
-            R::Space => Ok(Tok::Space(Whitespace(buf))),
+            R::Bracket => Ok(Tok(TokKind::Bracket, span)),
+            R::WordOp => Ok(Tok(TokKind::Word(Word::Op(Operative(()))), span)),
+            R::WordNum => Ok(Tok(TokKind::Word(Word::Num(Numeric(()))), span)),
+            R::WordId => Ok(Tok(TokKind::Word(Word::Id(Ident(()))), span)),
+            R::Space => Ok(Tok(TokKind::Space, span)),
         }
     }
 }
 
 impl<'input> Lexer<'input> {
     fn read_regular(&mut self, mut ic: (usize, char)) -> Option<<Self as Iterator>::Item> {
-        let (i ,c) = ic;
+        let (i, c) = ic;
         let spanned_start = i;
         let r = R::from_start_char(c);
+        let data = self.input;
         let mut buf = String::new();
         buf.push(c);
         loop {
+            let (i, _) = ic;
             let p: Option<char> = self.chars.peek().map(|(_, c)|*c);
             let p = match p {
                 // we're done reading input; finalize and return this token.
-                None => return Some(r.finalize(buf).map(|t|(spanned_start, t, i))),
+                None => return Some(r.finalize((spanned_start, i)).map(|t|t.repackage(data))),
                 Some(p) => p,
             };
             match r.action(p) {
                 RegAction::Continue => {
                     ic = self.chars.next().unwrap();
+                    dbg!(ic);
                     let c = ic.1;
                     assert_eq!(c, p);
                     buf.push(c);
                     continue;
                 }
                 RegAction::Complete => {
-                    return Some(r.finalize(buf).map(|t|(spanned_start, t, i)));
+                    return Some(r.finalize((spanned_start, i)).map(|t|t.repackage(data)));
                 }
             }
         }
@@ -299,8 +298,10 @@ impl<'input> Lexer<'input> {
 
         // now: c is either 'r' or '#', and p is the base quotation delimiter.
         let base_open_delim;
+        let content_start;
         let end_delim_set = if let Some(end) = raw_quoted_opener(p) {
             let ic = self.chars.next().unwrap();
+            content_start = ic.0+1;
             let c = ic.1;
             assert_eq!(c, p);
             base_open_delim = c;
@@ -331,16 +332,16 @@ impl<'input> Lexer<'input> {
                 // tokens, then add the saved potential end-delimiting character
                 // `c` as well as the number of sharps that *were* read, and
                 // then continue on accumulating into the quotation.
-
+                let content_end = ic.0-1;
                 loop {
                     if q.sharp_seek == q.sharp_count {
                         // we got to the number of sharps sought,
                         // then we have a full quotation form.
-                        let tok = Tok::Quote(Quoted {
+                        let tok = Tok(TokKind::Quote(Quoted {
                             sharp_count: Some(q.sharp_seek),
                             delim: Delims(base_open_delim, c),
-                            content: buf,
-                        });
+                            content: (),
+                        }), &self.input[content_start..=content_end]);
                         return Some(Ok((spanned_start, tok, i)));
                     }
                     let opt_ip = self.chars.peek().cloned();
@@ -374,7 +375,7 @@ impl<'input> Lexer<'input> {
 }
 
 impl<'input> Iterator for Lexer<'input> {
-    type Item = Spanned<Tok<String>, usize, LexicalError>;
+    type Item = Spanned<Tok<&'input str>, usize, LexicalError>;
     fn next(&mut self) -> Option<Self::Item> {
         let (i, c): (usize, char) = match self.chars.next() {
             Some((i, c)) => (i,c),
