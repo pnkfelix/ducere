@@ -40,17 +40,42 @@ pub struct Ident<S>(S);
 pub struct Numeric<S>(S);
 #[derive(Clone, PartialEq, Eq, Debug, AsRef)]
 pub struct Operative<S>(S);
+#[derive(Clone, PartialEq, Eq, Debug, AsRef)]
+pub struct Commalike<S>(S);
 
 impl AsRef<str> for Ident<String> { fn as_ref(&self) -> &str { self.0.as_ref() } }
 
+impl<IS: Into<String>> From<Commalike<IS>> for String { fn from(x: Commalike<IS>) -> String { x.0.into() } }
 impl<IS: Into<String>> From<Operative<IS>> for String { fn from(x: Operative<IS>) -> String { x.0.into() } }
 impl<IS: Into<String>> From<Numeric<IS>> for String { fn from(x: Numeric<IS>) -> String { x.0.into() } }
 impl<IS: Into<String>> From<Ident<IS>> for String { fn from(x: Ident<IS>) -> String { x.0.into() } }
 
+trait IsCommalike { fn is_commalike(self) -> bool; }
+impl IsCommalike for char {
+    fn is_commalike(self) -> bool {
+        self == ';' || self == ','
+    }
+}
 trait IsOperative { fn is_operative(self) -> bool; }
 impl IsOperative for char {
     fn is_operative(self) -> bool {
-        !self.is_alphanumeric() && !self.is_whitespace()
+        !self.is_alphanumeric() && !self.is_whitespace() && !self.is_commalike() && self != '"' && self != '\''
+    }
+}
+trait IsUnderalphanum {
+    fn is_underalpha(self) -> bool;
+    fn is_undernum(self) -> bool;
+    fn is_underalphanum(self) -> bool;
+}
+impl IsUnderalphanum for char {
+    fn is_underalpha(self) -> bool {
+        self.is_alphabetic() || self == '_'
+    }
+    fn is_undernum(self) -> bool {
+        self.is_numeric() || self == '_'
+    }
+    fn is_underalphanum(self) -> bool {
+        self.is_alphanumeric() || self == '_'
     }
 }
 
@@ -59,6 +84,7 @@ pub enum Word<S> {
     Op(Operative<S>),
     Num(Numeric<S>),
     Id(Ident<S>),
+    Com(Commalike<S>),
 }
 
 impl<IS> AsRef<str> for Word<IS> where IS: AsRef<str> {
@@ -67,6 +93,7 @@ impl<IS> AsRef<str> for Word<IS> where IS: AsRef<str> {
             Word::Op(x) => x.as_ref().as_ref(),
             Word::Num(x) => x.as_ref().as_ref(),
             Word::Id(x) => x.as_ref().as_ref(),
+            Word::Com(x) => x.as_ref().as_ref(),
         }
     }
 }
@@ -77,6 +104,7 @@ impl<IS> From<Word<IS>> for String where IS: Into<String> {
             Word::Op(x) => x.into(),
             Word::Num(x) => x.into(),
             Word::Id(x) => x.into(),
+            Word::Com(x) => x.into(),
         }
     }
 }
@@ -97,8 +125,9 @@ pub struct Delims(pub char, pub char);
 
 #[derive(Clone, PartialEq, Eq, Debug, AsRef)]
 pub struct Quoted<S> {
-    // If None, then htis is not a raw-string
+    // If None, then this is not a raw-string
     // If Some, then holds the number of sharps between the 'r' and the oepn delimiter.
+    // FIXME: it looks like the code isn't exercising the None case anywhere.
     pub sharp_count: Option<usize>,
     pub delim: Delims,
     #[as_ref]
@@ -144,15 +173,35 @@ pub enum TokKind {
     Space,
 }
 
+impl TokKind {
+    pub fn is_ident(&self) -> bool {
+        if let TokKind::Word(Word::Id(_)) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Tok<S>(pub TokKind, pub S);
+
+impl<S> Tok<S> {
+    pub fn kind(&self) -> &TokKind {
+        &self.0
+    }
+
+    pub fn data(&self) -> &S {
+        &self.1
+    }
+}
 
 pub type TokStr<'a> = Tok<&'a str>;
 
 impl Tok<(usize, usize)> {
     fn repackage<'a>(self, data: &'a str) -> (usize, Tok<&'a str>, usize) {
         let (i, j) = self.1;
-        dbg!((i, Tok(self.0, &data[i..=j]), j))
+        dbg!((i, Tok(self.0, &data[i..=j]), j+1))
     }
 }
 
@@ -214,7 +263,7 @@ enum RegAction { Complete, Continue, }
 impl R {
     fn from_start_char(c: char) -> Self {
         if c.is_numeric() { R::WordNum }
-        else if c.is_alphabetic() { R::WordId }
+        else if c.is_underalpha() { R::WordId }
         else if c.is_whitespace() { R::Space }
         else if c.is_open_bracket() || c.is_close_bracket() { R::Bracket }
         else { R::WordOp }
@@ -223,8 +272,8 @@ impl R {
         match self {
             // every bracket is its own token; we don't merge sequences of brackets into one token.
             R::Bracket => { RegAction::Complete }
-            R::WordNum => if p.is_alphanumeric() { RegAction::Continue } else { RegAction::Complete }
-            R::WordId => if p.is_alphanumeric() { RegAction::Continue } else { RegAction::Complete }
+            R::WordNum => if p.is_undernum() { RegAction::Continue } else { RegAction::Complete }
+            R::WordId => if p.is_underalphanum() { RegAction::Continue } else { RegAction::Complete }
             R::WordOp => if p.is_operative() { RegAction::Continue } else { RegAction::Complete }
             R::Space => if p.is_whitespace() { RegAction::Continue } else { RegAction::Complete }
         }
@@ -256,7 +305,7 @@ impl<'input> Lexer<'input> {
             let p: Option<char> = self.chars.peek().map(|(_, c)|*c);
             let p = match p {
                 // we're done reading input; finalize and return this token.
-                None => return Some(r.finalize((spanned_start, i)).map(|t|t.repackage(data))),
+                None => return dbg!(Some(dbg!(r.finalize((spanned_start, i))).map(|t|t.repackage(data)))),
                 Some(p) => p,
             };
             match r.action(p) {
@@ -269,8 +318,41 @@ impl<'input> Lexer<'input> {
                     continue;
                 }
                 RegAction::Complete => {
-                    return Some(r.finalize((spanned_start, i)).map(|t|t.repackage(data)));
+                    return dbg!(Some(dbg!(r.finalize(dbg!((spanned_start, i)))).map(|t|t.repackage(data))));
                 }
+            }
+        }
+    }
+
+    fn read_quotation(&mut self, ic: (usize, char)) -> Option<<Self as Iterator>::Item> {
+        let (i, c) = dbg!(ic);
+        let spanned_start = i;
+        let content_start = i+1;
+        let end_delim_set = simple_delimiter(c).unwrap();
+        loop {
+            let opt_ic = dbg!(self.chars.next());
+            let ic = match opt_ic {
+                None => return Some(Err(LexicalError::UnterminatedQuote)),
+                Some((_, '\\')) => {
+                    match self.chars.next() {
+                        None => return Some(Err(LexicalError::UnterminatedQuote)),
+                        Some((_i, _c)) => {
+                            continue;
+                        }
+                    }
+                }
+                Some(ic) => ic,
+            };
+            let c = ic.1;
+
+            if end_delim_set.contains(&c) {
+                let content_end = ic.0-1;
+                let tok = Tok(TokKind::Quote(Quoted {
+                    sharp_count: None,
+                    delim: Delims(ic.1, c),
+                    content: (),
+                }), dbg!(&self.input[spanned_start..=ic.0]));
+                return Some(Ok(dbg!((spanned_start, tok, ic.0))));
             }
         }
     }
@@ -344,7 +426,7 @@ impl<'input> Lexer<'input> {
                             delim: Delims(base_open_delim, c),
                             content: (),
                         }), &self.input[content_start..=content_end]);
-                        return Some(Ok((spanned_start, tok, i)));
+                        return dbg!(Some(Ok((spanned_start, tok, i))));
                     }
                     let opt_ip = self.chars.peek().cloned();
                     if opt_ip.map(|(_, p)|p) == Some('#') {
@@ -386,9 +468,13 @@ impl<'input> Iterator for Lexer<'input> {
         let p: Option<char> = self.chars.peek().map(|(_, c)|*c);
         match (c, p) {
             ('r', Some(p)) if (p == '#' || raw_quoted_opener(p).is_some()) => {
-                self.read_raw_quotation((i, c), p)
+                dbg!(self.read_raw_quotation((i, c), p))
             }
-            _ => self.read_regular((i, c))
+            ('"', _) | ('\'', _) => {
+                dbg!(self.read_quotation((i, c)))
+            }
+            _ =>
+                dbg!(self.read_regular((i, c)))
         }
     }
 }

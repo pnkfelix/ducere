@@ -1,18 +1,54 @@
 
 use crate::expr::{Expr, Var, BinOp};
 use crate::{Grammar, Rule, RegularRightSide, NonTerm, normalize_escapes, YakkerError};
+use crate::{Lexer, Tok};
 use lalrpop_util::ParseError;
 
-grammar;
-
-match {
-    r#""(\\"|[^"])*""# => STRING_LIT
-} else {
-    _
-}
+grammar<'a>(input: &'a str);
 
 extern {
+    type Location = usize;
     type Error = YakkerError;
+
+    enum Tok<'a> {
+        "(" => Tok::PAREN_OPEN,
+        ")" => Tok::PAREN_CLOSE,
+        "{" => Tok::CURLY_BRACE_OPEN,
+        "}" => Tok::CURLY_BRACE_CLOSE,
+        "[" => Tok::SQUARE_BRACKET_OPEN,
+        "]" => Tok::SQUARE_BRACKET_CLOSE,
+        "empty" => Tok::ID_EMPTY,
+        "true" => Tok::ID_TRUE,
+        "false" => Tok::ID_FALSE,
+        "eql" => Tok::ID_EQL,
+        "neq" => Tok::ID_NEQ,
+        "gt" => Tok::ID_GT,
+        "ge" => Tok::ID_GE,
+        "lt" => Tok::ID_LT,
+        "le" => Tok::ID_LE,
+        r"[a-z_][a-zA-Z_0-9]*" => Tok::LowerIdent(<&'a str>),
+        r"[A-Z][a-zA-Z_0-9]*" => Tok::UpperIdent(<&'a str>),
+        r"[1-9][0-9]*|0" => Tok::Numeric(<&'a str>),
+        STRING_LIT => Tok::QuoteLit('"', <&'a str>, '"'),
+        r#"''"# => Tok::QUOTE_QUOTE,
+        r"'[^'\\]'" => Tok::QuoteLit('\'', <&'a str>, '\''),
+        ";" => Tok::SEMI,
+        "::=" => Tok::COLON_COLON_EQ,
+        "<" => Tok::LESS_THAN,
+        ">" => Tok::GREATER_THAN,
+        ":=" => Tok::COLON_EQ,
+        "|" => Tok::PIPE,
+        "*" => Tok::ASTERISK,
+        "+" => Tok::PLUS,
+        "-" => Tok::DASH,
+        "/" => Tok::FWDSLASH,
+        "==" => Tok::EQL_EQL,
+        "!=" => Tok::NOT_EQL,
+        ">" => Tok::GT,
+        ">=" => Tok::GT_EQL,
+        "<" => Tok::LT,
+        "<=" => Tok::LT_EQL,
+    }
 }
 
 pub Grammar: Grammar = {
@@ -22,7 +58,7 @@ pub Grammar: Grammar = {
         Grammar { rules: Some(r).into_iter().chain(g.rules.into_iter()).collect() }
 };
 
-pub Rule: Rule = <nt_start:@L> <nt:ParametricNonTerm> <nt_end:@R> "::=" <r:RegularRightSide> => Rule { label: format!("{}:{}", nt_start, nt_end), lhs: nt.0.into(), param: nt.1, rhs: r };
+pub Rule: Rule = <nt_start:@L> <nt:ParametricNonTerm> <nt_end:@R> "::=" <r:RegularRightSide> => Rule { label: format!("{}:{}", nt_start, dbg!(nt_end)), lhs: nt.0.into(), param: nt.1, rhs: r };
 
 pub ParametricNonTerm: (NonTerm, Option<Var>) = {
     <nt:NonTerm> "(" <v:Var> ")" => (nt, Some(v)),
@@ -33,7 +69,7 @@ pub RightSideLeaf: RegularRightSide = {
     "(" <RegularRightSide> ")" => <>,
     r#"''"# => RegularRightSide::EmptyString,
     "empty" => RegularRightSide::EmptyLanguage,
-    <t:r"'[^'\\]'"> => RegularRightSide::Term(t[1..t.len()-1].into()),
+    <t:r"'[^'\\]'"> => RegularRightSide::Term(t.into()),
     <a:NonTerm> =>
             RegularRightSide::NonTerm { x: None, A: a, e: None },
     "<" <a:NonTerm> ">" =>
@@ -125,7 +161,7 @@ pub MulArg: Expr = {
     "(" ")"    => ().into(),
     "(" <e:Expr> ")"    => e,
     <s:STRING_LIT> =>?
-        normalize_escapes(&s[1..s.len()-1])
+        normalize_escapes(&s[0..s.len()])
             .map(|s|s.into())
             .map_err(|e| ParseError::User { error: e }),
 }

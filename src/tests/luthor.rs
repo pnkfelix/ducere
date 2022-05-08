@@ -1,11 +1,11 @@
 use crate::*;
 
-fn lex(s: &str) -> impl Iterator<Item=Result<String, LexicalError>> + '_ {
-    Lexer::new(s).map(|r|r.map(|(_, tok, _)|tok.into()))
+fn lex(s: &str) -> impl Iterator<Item=Result<String, luthor::LexicalError>> + '_ {
+    luthor::Lexer::new(s).map(|r|r.map(|(_, tok, _)|tok.into()))
 }
 
 fn lex_oks(s: &str) -> impl Iterator<Item=String> + '_ {
-    Lexer::new(s).filter_map(|r| -> Option<String> { r.map(|(_, tok, _)|tok.into()).ok() })
+    luthor::Lexer::new(s).filter_map(|r| -> Option<String> { r.map(|(_, tok, _)|tok.into()).ok() })
 }
 
 fn strings<'a>(v: &'a [&str]) -> impl Iterator<Item=String> + 'a {

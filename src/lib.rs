@@ -7,7 +7,191 @@ pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 mod luthor;
 pub mod transducer;
 
-pub use luthor::{Lexer, LexicalError, Tok, Word, Quoted, Whitespace};
+pub use toyman::{Lexer, Tok};
+
+mod toyman {
+    use super::{luthor, Spanned, YakkerError};
+
+    pub struct Lexer<'a>(luthor::Lexer<'a>);
+
+    impl<'a> Lexer<'a> {
+        pub fn new(input: &'a str) -> Self {
+            Lexer(luthor::Lexer::new(input))
+        }
+    }
+
+    impl<'input> Iterator for Lexer<'input> {
+        type Item = Spanned<Tok<'input>, usize, YakkerError>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            use luthor::{Delims, Word, Quoted};
+            use luthor::TokKind as K;
+
+            loop {
+                let x = if let Some(x) = dbg!(self.0.next()) { x } else { return None; };
+                let (i, x, j) = match x { Ok(x) => dbg!(x), Err(e) => { return Some(Err(YakkerError::Lex(e))); } };
+                let c = dbg!(x.data()).chars().next().unwrap();
+                let tok = match (*x.data(), x.kind()) {
+                    (s, K::Bracket) => match s {
+                        "(" => Tok::PAREN_OPEN,
+                        ")" => Tok::PAREN_CLOSE,
+                        "{" => Tok::CURLY_BRACE_OPEN,
+                        "}" => Tok::CURLY_BRACE_CLOSE,
+                        "[" => Tok::SQUARE_BRACKET_OPEN,
+                        "]" => Tok::SQUARE_BRACKET_CLOSE,
+                        "'" => Tok::SINGLE_QUOTE,
+                        "\"" => Tok::DOUBLE_QUOTE,
+                        s => panic!("unhandled bracket type `{}`", s),
+                    },
+
+                    (s, K::Word(Word::Com(_))) => {
+                        Tok::Numeric(s)
+                    }
+
+                    (s, K::Word(Word::Num(_))) => {
+                        Tok::Numeric(s)
+                    }
+
+
+                    (s, K::Word(Word::Op(_))) => {
+                        match s {
+                            ";" => Tok::SEMI,
+                            "::=" => Tok::COLON_COLON_EQ,
+                            ":=" => Tok::COLON_EQ,
+                            "|" => Tok::PIPE,
+                            "*" => Tok::ASTERISK,
+                            "+" => Tok::PLUS,
+                            "-" => Tok::DASH,
+                            "/" => Tok::FWDSLASH,
+                            "==" => Tok::EQL_EQL,
+                            "!=" => Tok::NOT_EQL,
+                            ">" => Tok::GT,
+                            ">=" => Tok::GT_EQL,
+                            "<" => Tok::LT,
+                            "<=" => Tok::LT_EQL,
+                            _ => Tok::Operative(s)
+                        }
+                    }
+
+                    (s, K::Quote(Quoted { sharp_count: _, delim: Delims(c1, c2), content: _ })) => {
+                        dbg!(Tok::QuoteLit(*c1, &s[1..(s.len()-1)], *c2))
+                    }
+
+                    (_, K::Space) => {
+                        // skip the space and grab next token.
+                        continue;
+                    }
+
+                    ("empty", k) => { assert!(k.is_ident()); Tok::ID_EMPTY }
+                    ("true", k) => { assert!(k.is_ident()); Tok::ID_TRUE }
+                    ("false", k) => { assert!(k.is_ident()); Tok::ID_FALSE }
+                    ("eql", k) => { assert!(k.is_ident()); Tok::ID_EQL }
+                    ("neq", k) => { assert!(k.is_ident()); Tok::ID_NEQ }
+                    ("gt", k) => { assert!(k.is_ident()); Tok::ID_GT }
+                    ("ge", k) => { assert!(k.is_ident()); Tok::ID_GE }
+                    ("lt", k) => { assert!(k.is_ident()); Tok::ID_LT }
+                    ("le", k) => { assert!(k.is_ident()); Tok::ID_LE }
+
+                    (s, K::Word(Word::Id(_))) if s.chars().next().unwrap().is_uppercase() => {
+                        dbg!(Tok::UpperIdent(s))
+                    }
+                    (s, K::Word(Word::Id(_))) => {
+                        assert!(c == '_' || c.is_lowercase());
+                        Tok::LowerIdent(s)
+                    }
+                };
+                return Some(Ok(dbg!((i, tok, j))));
+            }
+        }
+    }
+
+    #[allow(non_camel_case_types)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum Tok<'a> {
+        // "("
+        PAREN_OPEN,
+        // ")"
+        PAREN_CLOSE,
+        // "{"
+        CURLY_BRACE_OPEN,
+        // "}"
+        CURLY_BRACE_CLOSE,
+        // "["
+        SQUARE_BRACKET_OPEN,
+        // "]"
+        SQUARE_BRACKET_CLOSE,
+        // "\""
+        DOUBLE_QUOTE,
+        // "'"
+        SINGLE_QUOTE,
+
+        // "empty"
+        ID_EMPTY,
+        // "true"
+        ID_TRUE,
+        // "false"
+        ID_FALSE,
+        // "eql"
+        ID_EQL,
+        // "neq"
+        ID_NEQ,
+        // "gt"
+        ID_GT,
+        // "ge"
+        ID_GE,
+        // "lt"
+        ID_LT,
+        // "le"
+        ID_LE,
+        // r"[a-z_][a-zA-Z_0-9]*"
+        LowerIdent(&'a str),
+        // r"[A-Z][a-zA-Z_0-9]*"
+        UpperIdent(&'a str),
+        // r"[1-9][0-9]*|0"
+        Numeric(&'a str),
+
+        // ";" or ","
+        Commalike(&'a str),
+
+        // r#""(\\"|[^"])*""# => STRING_LIT
+        // r"'[^'\\]'"
+        QuoteLit(char, &'a str, char),
+        // "''"
+        QUOTE_QUOTE,
+
+        // ";"
+        SEMI,
+        // "::="
+        COLON_COLON_EQ,
+        // ":="
+        COLON_EQ,
+        // "|"
+        PIPE,
+        // "*"
+        ASTERISK,
+        // "+"
+        PLUS,
+        // "-"
+        DASH,
+        // "/"
+        FWDSLASH,
+        // "=="
+        EQL_EQL,
+        // "!="
+        NOT_EQL,
+        // ">"
+        GT,
+        // ">="
+        GT_EQL,
+        // "<"
+        LT,
+        // "<="
+        LT_EQL,
+        // (other)
+        Operative(&'a str),
+    }
+}
+
 
 pub trait Recognizer {
     type Term;
@@ -302,6 +486,7 @@ lalrpop_mod!(pub yakker); // synthesized by LALRPOP
 pub enum YakkerError {
     NoCharAfterBackslash,
     UnrecognizedChar(char),
+    Lex(luthor::LexicalError),
 }
 
 fn normalize_escapes(input: &str) -> Result<String, YakkerError> {

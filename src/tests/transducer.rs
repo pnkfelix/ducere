@@ -5,9 +5,11 @@ use crate::tests::*;
 use crate::expr;
 use crate::specification_rules::transducer::TransducerConfig;
 use crate::yakker;
+use crate::toyman;
 
 fn expr(s: &str) -> expr::Expr {
-    yakker::ExprParser::new().parse(s).unwrap()
+    let lex = toyman::Lexer::new(s);
+    yakker::ExprParser::new().parse(s, lex).unwrap()
 }
 
 pub fn fig_2_a() -> Transducer {

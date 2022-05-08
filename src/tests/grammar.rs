@@ -2,14 +2,20 @@ use crate::*;
 use super::*;
 
 pub(crate) fn right_side(s: &str) -> RegularRightSide {
-    yakker::RegularRightSideParser::new().parse(s).unwrap()
+    let lex = toyman::Lexer::new(s);
+    yakker::RegularRightSideParser::new().parse(s, lex).unwrap()
+}
+
+#[test]
+fn regular_right_sides_single() {
+    let g = Grammar::empty();
+    assert!(g.matches(&input("c"), &right_side(r"'c'")).has_parse());
+    assert!(g.matches(&input("d"), &right_side(r"'c'")).no_parse());
 }
 
 #[test]
 fn regular_right_sides() {
     let g = Grammar::empty();
-    assert!(g.matches(&input("c"), &right_side(r"'c'")).has_parse());
-    assert!(g.matches(&input("d"), &right_side(r"'c'")).no_parse());
     assert!(g.matches(&input("ab"), &right_side(r"'a''b'")).has_parse());
     assert!(g.matches(&input("ac"), &right_side(r"'a''b'")).no_parse());
     assert!(g.matches(&input("abc"), &right_side(r"'a''b''c'")).has_parse());
@@ -33,26 +39,36 @@ fn regular_right_sides_expression_dsl() {
 
 #[test]
 fn non_empty_grammar() {
-    let g1 = yakker::GrammarParser::new().parse(r"A::='c'").unwrap();
+    let s = r"A::='c'";
+    let lex = toyman::Lexer::new(s);
+    let g1 = yakker::GrammarParser::new().parse(s, lex).unwrap();
     assert!(g1.matches(&input("c"), &right_side(r"<x:=A(0)>")).has_parse());
     assert!(g1.matches(&input("d"), &right_side(r"<x:=A(0)>")).no_parse());
-    let g2 = yakker::GrammarParser::new().parse(r"B::='d'").unwrap();
+    let s = r"B::='d'";
+    let lex = toyman::Lexer::new(s);
+    let g2 = yakker::GrammarParser::new().parse(s, lex).unwrap();
     assert!(g2.matches(&input("c"), &right_side(r"<x:=B(0)>")).no_parse());
     assert!(g2.matches(&input("d"), &right_side(r"<x:=B(0)>")).has_parse());
     let g3 = Grammar { rules: g1.rules.into_iter().chain(g2.rules.into_iter()).collect() };
     assert!(g3.matches(&input("c"), &right_side(r"<x:=A(0)>")).has_parse());
     assert!(g3.matches(&input("d"), &right_side(r"<x:=B(0)>")).has_parse());
-    let g4 = yakker::GrammarParser::new().parse(r"A::='c'; B::='d'").unwrap();
+    let s = r"A::='c';B::='d'";
+    let lex = toyman::Lexer::new(s);
+    let g4 = yakker::GrammarParser::new().parse(s, lex).unwrap();
     assert!(g4.matches(&input("c"), &right_side(r"<x:=A(0)>")).has_parse());
     assert!(g4.matches(&input("d"), &right_side(r"<x:=B(0)>")).has_parse());
-    let g5 = yakker::GrammarParser::new().parse(r"A::=<x:=C(0)>; B::=<x:=D(1)>; C::='c'; D::='d';").unwrap();
+    let s = r"A::= <x:=C(0)>;B::= <x:=D(1)>;C::='c';D::='d';";
+    let lex = toyman::Lexer::new(s);
+    let g5 = yakker::GrammarParser::new().parse(s, lex).unwrap();
     assert!(g5.matches(&input("c"), &right_side(r"<x:=A(0)>")).has_parse());
     assert!(g5.matches(&input("d"), &right_side(r"<x:=B(0)>")).has_parse());
 }
 
 #[test]
 fn grammar_sugar() {
-    let g = yakker::GrammarParser::new().parse(r"A::=<Z(0)>; B::=<y:=D>; Z::=<C>; C::='c'; D::='d'").unwrap();
+    let s = r"A::= <Z(0)>;B::= <y:=D>;Z::= <C>;C::='c';D::='d'";
+    let lex = toyman::Lexer::new(s);
+    let g = yakker::GrammarParser::new().parse(s, lex).unwrap();
     assert!(g.matches(&input("c"), &right_side(r"<x:=A>")).has_parse());
     assert!(g.matches(&input("d"), &right_side(r"<x:=A>")).no_parse());
     assert!(g.matches(&input("d"), &right_side(r"<B>")).has_parse());
@@ -61,7 +77,9 @@ fn grammar_sugar() {
     assert!(g.matches(&input("d"), &right_side(r"x:=A")).no_parse());
     assert!(g.matches(&input("d"), &right_side(r"B")).has_parse());
     assert!(g.matches(&input("d"), &right_side(r"A")).no_parse());
-    let g = yakker::GrammarParser::new().parse(r"A::=<Z(0)>; B::=y:=D; Z::=C; C::='c'; D::='d'").unwrap();
+    let s = r"A::= <Z(0)>;B::=y:=D;Z::=C;C::='c';D::='d'";
+    let lex = toyman::Lexer::new(s);
+    let g = yakker::GrammarParser::new().parse(s, lex).unwrap();
     assert!(g.matches(&input("c"), &right_side(r"<x:=A>")).has_parse());
     assert!(g.matches(&input("d"), &right_side(r"<x:=A>")).no_parse());
     assert!(g.matches(&input("d"), &right_side(r"<B>")).has_parse());
@@ -72,35 +90,72 @@ fn grammar_sugar() {
     assert!(g.matches(&input("d"), &right_side(r"A")).no_parse());
 }
 
+macro_rules! parse_from {
+    ($KindParser:ident $s:expr) => {
+        {
+            let s = $s;
+            let lex = toyman::Lexer::new(s);
+            yakker::$KindParser::new().parse(s, lex)
+        }
+    }
+}
+
 #[test]
-fn yakker() {
+fn yakker_ident() {
     use expr::{Expr};
 
-    assert_eq!(yakker::VarParser::new().parse("x"), Ok('x'.into()));
+    assert_eq!(parse_from!(VarParser "x"), Ok('x'.into()));
+    assert_eq!(parse_from!(ExprParser "x"), Ok(Expr::Var('x'.into())));
+    assert_eq!(parse_from!(ExprParser "x"), Ok(Expr::Var('x'.into())));
 
-    assert_eq!(yakker::ExprParser::new().parse("x"), Ok(Expr::Var('x'.into())));
-    assert_eq!(yakker::ExprParser::new().parse("x"), Ok(Expr::Var('x'.into())));
-    assert_eq!(yakker::ExprParser::new().parse("true"), Ok(true.into()));
-    assert_eq!(yakker::ExprParser::new().parse(r#""..""#), Ok("..".into()));
-    assert_eq!(yakker::ExprParser::new().parse(r#""xx""#), Ok("xx".into()));
-    assert_eq!(yakker::ExprParser::new().parse(r#""x""#), Ok("x".into()));
-    assert_eq!(yakker::ExprParser::new().parse(r#""""#), Ok("".into()));
+    assert_eq!(parse_from!(ExprParser "true"), Ok(true.into()));
+}
 
-    assert_eq!(yakker::ExprParser::new().parse(r#""\"""#), Ok("\"".into()));
-    assert_eq!(yakker::ExprParser::new().parse(r#""\n""#), Ok("\n".into()));
+#[test]
+fn yakker_basic_double_quotes() {
+    use expr::{Expr};
+    {
+        let s = r#""..""#;
+        let lex = toyman::Lexer::new(s);
+        assert_eq!(yakker::MulArgParser::new().parse(s, lex), Ok("..".into()));
+    }
 
-    assert_eq!(yakker::RegularRightSideParser::new().parse(r"'c'"), Ok(RegularRightSide::Term("c".into())));
-    assert_eq!(yakker::RegularRightSideParser::new().parse(r"'c''d'"),
+    assert_eq!(parse_from!(MulArgParser r#""..""#), Ok("..".into()));
+    assert_eq!(parse_from!(ExprParser r#""..""#), Ok("..".into()));
+    assert_eq!(parse_from!(ExprParser r#""xx""#), Ok("xx".into()));
+    assert_eq!(parse_from!(ExprParser r#""x""#), Ok("x".into()));
+    assert_eq!(parse_from!(ExprParser r#""""#), Ok("".into()));
+}
+#[test]
+fn yakker_basic_double_quotes_escapes() {
+    use expr::{Expr};
+    assert_eq!(parse_from!(ExprParser r#""\"""#), Ok("\"".into()));
+    assert_eq!(parse_from!(ExprParser r#""\n""#), Ok("\n".into()));
+}
+
+#[test]
+fn yakker_basic_single_quotes() {
+    use expr::{Expr};
+    assert_eq!(parse_from!(RegularRightSideParser r"'c'"), Ok(RegularRightSide::Term("c".into())));
+    assert_eq!(parse_from!(RegularRightSideParser r"'c''d'"),
                Ok(RegularRightSide::Concat(Box::new(RegularRightSide::Term("c".into())),
                                            Box::new(RegularRightSide::Term("d".into()))
                )));
-    assert_eq!(yakker::NonTermParser::new().parse(r"A"), Ok("A".into()));
+}
+#[test]
+fn yakker_nonterm() {
+    assert_eq!(parse_from!(NonTermParser r"A"), Ok("A".into()));
+}
 
-    assert_eq!(yakker::RuleParser::new().parse(r"A::='c'"), Ok(Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("c".into()))));
+#[test]
+fn yakker_rules() {
+    assert_eq!(parse_from!(RuleParser r"A::= 'c'"), Ok(Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("c".into()))));
 
-    assert_eq!(yakker::GrammarParser::new().parse(r"A::='c'"), Ok(Grammar { rules: vec![Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("c".into()))]}));
-    assert_eq!(yakker::GrammarParser::new().parse(r"A::='a'; B::='b'"), Ok(Grammar { rules: vec![Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("a".into())),
-    Rule::labelled_new("9:10", "B".into(), None, RegularRightSide::Term("b".into()))]}));
+    assert_eq!(parse_from!(GrammarParser r"A::= 'c'"), Ok(Grammar { rules: vec![Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("c".into()))]}));
+    assert_eq!(parse_from!(GrammarParser r"A::= 'a';B::= 'b'"), Ok(Grammar {
+        rules: vec![
+            Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("a".into())),
+            Rule::labelled_new("9:10", "B".into(), None, RegularRightSide::Term("b".into()))]}));
 }
 
 // Example: Imperative fixed-width integer
@@ -119,19 +174,21 @@ macro_rules! assert_matches {
 
 #[test]
 fn imperative_fixed_width_integer_foundations() {
-    assert_matches!(yakker::NonTermParser::new().parse("Int"), Ok(_));
-    assert_matches!(yakker::RegularRightSideParser::new().parse("<x:=Int(())>"), Ok(_));
-    assert_matches!(yakker::RightSideLeafParser::new().parse("'0'"), Ok(_));
-    assert_matches!(yakker::RuleParser::new().parse("Int ::= '0' "), Ok(_));
-    assert_matches!(yakker::RuleParser::new().parse("Int ::= ( ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') )* "), Ok(_));
+    assert_matches!(parse_from!(NonTermParser "Int"), Ok(_));
+    assert_matches!(parse_from!(RegularRightSideParser "<x:=Int(())>"), Ok(_));
+    assert_matches!(parse_from!(RightSideLeafParser "'0'"), Ok(_));
+    assert_matches!(parse_from!(RuleParser "Int ::= '0' "), Ok(_));
+    assert_matches!(parse_from!(RuleParser "Int ::= ( ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') )* "), Ok(_));
 
-    assert_matches!(yakker::RuleParser::new().parse("Int ::= { n:=y_0 } ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0]"), Ok(_));
-    assert_matches!(yakker::RuleParser::new().parse("Int(n) ::= ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0]"), Ok(_));
+    assert_matches!(parse_from!(RuleParser "Int ::= { n:=y_0 } ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0]"), Ok(_));
+    assert_matches!(parse_from!(RuleParser "Int(n) ::= ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0]"), Ok(_));
 }
 
 #[cfg(test)]
 fn imperative_fixed_width_integer_grammar() -> Grammar {
-    yakker::GrammarParser::new().parse(r"Int(n) ::= ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0];").unwrap()
+    let s = r"Int(n) ::= ([n > 0] ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') { n := n-1 })* [n==0];";
+    let lex = toyman::Lexer::new(s);
+    yakker::GrammarParser::new().parse(s, lex).unwrap()
 }
 
 #[test]
@@ -143,7 +200,7 @@ fn imperative_fixed_width_integer_1() {
 
 #[test]
 fn simpler_variant_on_ifwi2_a() {
-    assert!(yakker::GrammarParser::new().parse(r"S(n) ::= [n gt 0] 'a' { n := n-1 } [n gt 0] 'b' { n := n-1 } [n eql 0];")
+    assert!(parse_from!(GrammarParser r"S(n) ::= [n gt 0] 'a' { n := n-1 } [n gt 0] 'b' { n := n-1 } [n eql 0];")
             .unwrap()
             .matches(&input("ab"), &right_side(r"<S(2)>"))
             .has_parse());
@@ -151,7 +208,7 @@ fn simpler_variant_on_ifwi2_a() {
 
 #[test]
 fn simpler_variant_on_ifwi2_b() {
-    assert!(yakker::GrammarParser::new().parse(r"S(n) ::= ([n gt 0] ( 'a' | 'b' ) { n := n- 1 })* [n eql 0];")
+    assert!(parse_from!(GrammarParser r"S(n) ::= ([n gt 0] ( 'a' | 'b' ) { n := n- 1 })* [n eql 0];")
             .unwrap()
             .matches(&input("ab"), &right_side(r"<S(2)>"))
             .has_parse());
@@ -170,7 +227,7 @@ fn imperative_fixed_width_integer_2() {
 
 #[test]
 fn functional_fixed_width_integer() {
-    let g = yakker::GrammarParser::new().parse(r"Dig ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'; Int(n) ::= [n eql 0] | [ n gt 0 ] Dig <Int(n - 1)>;").unwrap();
+    let g = parse_from!(GrammarParser r"Dig ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'; Int(n) ::= [n eql 0] | [ n gt 0 ] Dig <Int(n - 1)> ;").unwrap();
     assert!(g.matches(&input("0"), &right_side(r"<Int(1)>")).has_parse());
     assert!(g.matches(&input("1"), &right_side(r"<Int(1)>")).has_parse());
     assert!(g.matches(&input("10"), &right_side(r"<Int(2)>")).has_parse());
@@ -184,8 +241,8 @@ fn functional_fixed_width_integer() {
 
 #[test]
 fn left_factoring() {
-    yakker::RuleParser::new().parse("A ::= (B '?') | (C '!')").unwrap();
-    let g = yakker::GrammarParser::new().parse(r"A ::= (B '?') | (C '!'); B ::= 'x' '+' 'x'; C ::= ('x' '+' 'x') | ('x' '-' 'x');").unwrap();
+    parse_from!(RuleParser "A ::= (B '?') | (C '!')").unwrap();
+    let g = parse_from!(GrammarParser r"A ::= (B '?') | (C '!'); B ::= 'x' '+' 'x'; C ::= ('x' '+' 'x') | ('x' '-' 'x');").unwrap();
     assert!(g.matches(&input("x+x?"), &right_side("A")).has_parse());
     assert!(g.matches(&input("x+x!"), &right_side("A")).has_parse());
     assert!(g.matches(&input("x-x!"), &right_side("A")).has_parse());
