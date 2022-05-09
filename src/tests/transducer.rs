@@ -12,8 +12,18 @@ fn expr(s: &str) -> expr::Expr {
     yakker::ExprParser::new().parse(s, lex).unwrap()
 }
 
+const fn state_iota<const DIM: usize>() -> [State; DIM] {
+    let mut array = [State(0); DIM];
+    let mut i = 0;
+    while i < DIM {
+        array[i] = State(i);
+        i += 1;
+    }
+    array
+}
+
 pub fn fig_2_a() -> Transducer {
-    let s = [State(0), State(1), State(2), State(3)];
+    let s: [State; 4] = state_iota();
     let d0 = StateBuilder::final_state(format!("int")).build();
     let d1 = StateBuilder::labelled("1".into())
         .constraint(expr("n == 0"), s[0])
@@ -50,8 +60,7 @@ fn imperative_fixed_width_integer() {
 }
 
 pub fn fig_2_b() -> Transducer {
-    let s = [State(0), State(1), State(2), State(3),
-             State(4), State(5), State(6)];
+    let s: [State; 7] = state_iota();
     let d0 = StateBuilder::final_state(format!("int")).build();
     let d1 = StateBuilder::parameterized("1".into(), "n".into())
         .constraint(expr("n == 0"), s[0])
