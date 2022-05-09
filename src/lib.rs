@@ -157,8 +157,6 @@ mod toyman {
         // "''"
         QUOTE_QUOTE,
 
-        // ";"
-        SEMI,
         // ":="
         COLON_EQ,
         // "|"
