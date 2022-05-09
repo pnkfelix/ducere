@@ -32,15 +32,9 @@ mod toyman {
                 let (i, x, j) = match x { Ok(x) => dbg!(x), Err(e) => { return Some(Err(YakkerError::Lex(e))); } };
                 let c = dbg!(x.data()).chars().next().unwrap();
                 let tok = match (*x.data(), x.kind()) {
-                    (s, K::Bracket) => match s {
-                        "(" => Tok::PAREN_OPEN,
-                        ")" => Tok::PAREN_CLOSE,
-                        "{" => Tok::CURLY_BRACE_OPEN,
-                        "}" => Tok::CURLY_BRACE_CLOSE,
-                        "[" => Tok::SQUARE_BRACKET_OPEN,
-                        "]" => Tok::SQUARE_BRACKET_CLOSE,
-                        s => panic!("unhandled bracket type `{}`", s),
-                    },
+                    (s, K::Bracket) => {
+                        Tok::Bracket(s)
+                    }
 
                     (s, K::Word(Word::Com(_))) => {
                         Tok::Commalike(s)
@@ -49,7 +43,6 @@ mod toyman {
                     (s, K::Word(Word::Num(_))) => {
                         Tok::Numeric(s)
                     }
-
 
                     (s, K::Word(Word::Op(_))) => {
                         match s {
@@ -82,18 +75,8 @@ mod toyman {
     #[allow(non_camel_case_types)]
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Tok<'a> {
-        // "("
-        PAREN_OPEN,
-        // ")"
-        PAREN_CLOSE,
-        // "{"
-        CURLY_BRACE_OPEN,
-        // "}"
-        CURLY_BRACE_CLOSE,
-        // "["
-        SQUARE_BRACKET_OPEN,
-        // "]"
-        SQUARE_BRACKET_CLOSE,
+        // "(", ")", "{", "}", "[", "]"
+        Bracket(&'a str),
 
         // r"[a-z_][a-zA-Z_0-9]*"
         LowerIdent(&'a str),
