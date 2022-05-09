@@ -227,7 +227,7 @@ fn imperative_fixed_width_integer_2() {
 
 #[test]
 fn functional_fixed_width_integer() {
-    let g = parse_from!(GrammarParser r"Dig ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'; Int(n) ::= [n eql 0] | [ n gt 0 ] Dig <Int(n - 1)> ;").unwrap();
+    let g = parse_from!(GrammarParser r"Dig ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'; Int(n) ::= [n eql 0] | [ n gt 0 ] Dig <Int(n - 1)>;").unwrap();
     assert!(g.matches(&input("0"), &right_side(r"<Int(1)>")).has_parse());
     assert!(g.matches(&input("1"), &right_side(r"<Int(1)>")).has_parse());
     assert!(g.matches(&input("10"), &right_side(r"<Int(2)>")).has_parse());
