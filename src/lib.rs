@@ -55,7 +55,6 @@ mod toyman {
 
                     (s, K::Word(Word::Op(_))) => {
                         match s {
-                            ":=" => Tok::COLON_EQ,
                             "|" => Tok::PIPE,
                             "*" => Tok::ASTERISK,
                             "+" => Tok::PLUS,
@@ -157,8 +156,6 @@ mod toyman {
         // "''"
         QUOTE_QUOTE,
 
-        // ":="
-        COLON_EQ,
         // "|"
         PIPE,
         // "*"

@@ -36,7 +36,7 @@ extern {
         "::=" => Tok::Operative("::="),
         "<" => Tok::LESS_THAN,
         ">" => Tok::GREATER_THAN,
-        ":=" => Tok::COLON_EQ,
+        ":=" => Tok::Operative(":="),
         "|" => Tok::PIPE,
         "*" => Tok::ASTERISK,
         "+" => Tok::PLUS,
