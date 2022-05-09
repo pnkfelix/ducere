@@ -55,7 +55,6 @@ mod toyman {
 
                     (s, K::Word(Word::Op(_))) => {
                         match s {
-                            "::=" => Tok::COLON_COLON_EQ,
                             ":=" => Tok::COLON_EQ,
                             "|" => Tok::PIPE,
                             "*" => Tok::ASTERISK,
@@ -160,8 +159,6 @@ mod toyman {
 
         // ";"
         SEMI,
-        // "::="
-        COLON_COLON_EQ,
         // ":="
         COLON_EQ,
         // "|"

@@ -33,7 +33,7 @@ extern {
         r#"''"# => Tok::QUOTE_QUOTE,
         r"'[^'\\]'" => Tok::QuoteLit('\'', <&'a str>, '\''),
         ";" => Tok::Commalike(";"),
-        "::=" => Tok::COLON_COLON_EQ,
+        "::=" => Tok::Operative("::="),
         "<" => Tok::LESS_THAN,
         ">" => Tok::GREATER_THAN,
         ":=" => Tok::COLON_EQ,
