@@ -45,7 +45,7 @@ mod toyman {
                     },
 
                     (s, K::Word(Word::Com(_))) => {
-                        Tok::Numeric(s)
+                        Tok::Commalike(s)
                     }
 
                     (s, K::Word(Word::Num(_))) => {
@@ -55,7 +55,6 @@ mod toyman {
 
                     (s, K::Word(Word::Op(_))) => {
                         match s {
-                            ";" => Tok::SEMI,
                             "::=" => Tok::COLON_COLON_EQ,
                             ":=" => Tok::COLON_EQ,
                             "|" => Tok::PIPE,

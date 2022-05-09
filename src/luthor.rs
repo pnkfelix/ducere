@@ -237,6 +237,7 @@ enum R {
     WordOp,
     WordNum,
     WordId,
+    WordComma,
     Bracket,
     Space,
 }
@@ -264,6 +265,7 @@ impl R {
     fn from_start_char(c: char) -> Self {
         if c.is_numeric() { R::WordNum }
         else if c.is_underalpha() { R::WordId }
+        else if c.is_commalike() { R::WordComma }
         else if c.is_whitespace() { R::Space }
         else if c.is_open_bracket() || c.is_close_bracket() { R::Bracket }
         else { R::WordOp }
@@ -272,6 +274,9 @@ impl R {
         match self {
             // every bracket is its own token; we don't merge sequences of brackets into one token.
             R::Bracket => { RegAction::Complete }
+            // every comma-like is its own token; we don't merge sequences of
+            // commas or semicolons into one token.
+            R::WordComma => { RegAction::Complete }
             R::WordNum => if p.is_undernum() { RegAction::Continue } else { RegAction::Complete }
             R::WordId => if p.is_underalphanum() { RegAction::Continue } else { RegAction::Complete }
             R::WordOp => if p.is_operative() { RegAction::Continue } else { RegAction::Complete }
@@ -284,6 +289,7 @@ impl R {
     fn finalize(&self, span: (usize, usize)) -> Result<Tok<(usize, usize)>, LexicalError> {
         match self {
             R::Bracket => Ok(Tok(TokKind::Bracket, span)),
+            R::WordComma => Ok(Tok(TokKind::Word(Word::Com(Commalike(()))), span)),
             R::WordOp => Ok(Tok(TokKind::Word(Word::Op(Operative(()))), span)),
             R::WordNum => Ok(Tok(TokKind::Word(Word::Num(Numeric(()))), span)),
             R::WordId => Ok(Tok(TokKind::Word(Word::Id(Ident(()))), span)),
