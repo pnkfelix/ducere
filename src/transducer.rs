@@ -84,6 +84,16 @@ impl StateBuilder {
         })
     }
 
+    pub fn final_state_labelled_and_accepting(label: String, accepts: Vec<String>) -> Self {
+        Self(StateData {
+            label,
+            param_name: None,
+            transitions: vec![],
+            calls: vec![],
+            output_if_final: Some(accepts.into_iter().map(|nt|NonTerm(nt)).collect()),
+        })
+    }
+
     pub fn labelled(l: String) -> Self {
         Self(StateData {
             label: l,
