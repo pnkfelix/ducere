@@ -30,7 +30,7 @@ extern {
         r"[A-Z][a-zA-Z_0-9]*" => Tok::UpperIdent(<&'a str>),
         r"[1-9][0-9]*|0" => Tok::Numeric(<&'a str>),
         STRING_LIT => Tok::QuoteLit('"', <&'a str>, '"'),
-        r#"''"# => Tok::QUOTE_QUOTE,
+        r#"''"# => Tok::QuoteLit('\'', "", '\''),
         r"'[^'\\]'" => Tok::QuoteLit('\'', <&'a str>, '\''),
         ";" => Tok::Commalike(";"),
         "::=" => Tok::Operative("::="),

@@ -39,8 +39,6 @@ mod toyman {
                         "}" => Tok::CURLY_BRACE_CLOSE,
                         "[" => Tok::SQUARE_BRACKET_OPEN,
                         "]" => Tok::SQUARE_BRACKET_CLOSE,
-                        "'" => Tok::SINGLE_QUOTE,
-                        "\"" => Tok::DOUBLE_QUOTE,
                         s => panic!("unhandled bracket type `{}`", s),
                     },
 
@@ -106,10 +104,6 @@ mod toyman {
         SQUARE_BRACKET_OPEN,
         // "]"
         SQUARE_BRACKET_CLOSE,
-        // "\""
-        DOUBLE_QUOTE,
-        // "'"
-        SINGLE_QUOTE,
 
         // "empty"
         ID_EMPTY,
@@ -142,8 +136,6 @@ mod toyman {
         // r#""(\\"|[^"])*""# => STRING_LIT
         // r"'[^'\\]'"
         QuoteLit(char, &'a str, char),
-        // "''"
-        QUOTE_QUOTE,
 
         // (other)
         Operative(&'a str),
