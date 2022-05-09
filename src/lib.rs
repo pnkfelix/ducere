@@ -55,17 +55,6 @@ mod toyman {
 
                     (s, K::Word(Word::Op(_))) => {
                         match s {
-                            "|" => Tok::PIPE,
-                            "*" => Tok::ASTERISK,
-                            "+" => Tok::PLUS,
-                            "-" => Tok::DASH,
-                            "/" => Tok::FWDSLASH,
-                            "==" => Tok::EQL_EQL,
-                            "!=" => Tok::NOT_EQL,
-                            ">" => Tok::GT,
-                            ">=" => Tok::GT_EQL,
-                            "<" => Tok::LT,
-                            "<=" => Tok::LT_EQL,
                             _ => Tok::Operative(s)
                         }
                     }
@@ -156,28 +145,6 @@ mod toyman {
         // "''"
         QUOTE_QUOTE,
 
-        // "|"
-        PIPE,
-        // "*"
-        ASTERISK,
-        // "+"
-        PLUS,
-        // "-"
-        DASH,
-        // "/"
-        FWDSLASH,
-        // "=="
-        EQL_EQL,
-        // "!="
-        NOT_EQL,
-        // ">"
-        GT,
-        // ">="
-        GT_EQL,
-        // "<"
-        LT,
-        // "<="
-        LT_EQL,
         // (other)
         Operative(&'a str),
     }
