@@ -66,16 +66,6 @@ mod toyman {
                         continue;
                     }
 
-                    ("empty", k) => { assert!(k.is_ident()); Tok::ID_EMPTY }
-                    ("true", k) => { assert!(k.is_ident()); Tok::ID_TRUE }
-                    ("false", k) => { assert!(k.is_ident()); Tok::ID_FALSE }
-                    ("eql", k) => { assert!(k.is_ident()); Tok::ID_EQL }
-                    ("neq", k) => { assert!(k.is_ident()); Tok::ID_NEQ }
-                    ("gt", k) => { assert!(k.is_ident()); Tok::ID_GT }
-                    ("ge", k) => { assert!(k.is_ident()); Tok::ID_GE }
-                    ("lt", k) => { assert!(k.is_ident()); Tok::ID_LT }
-                    ("le", k) => { assert!(k.is_ident()); Tok::ID_LE }
-
                     (s, K::Word(Word::Id(_))) if s.chars().next().unwrap().is_uppercase() => {
                         dbg!(Tok::UpperIdent(s))
                     }
@@ -105,24 +95,6 @@ mod toyman {
         // "]"
         SQUARE_BRACKET_CLOSE,
 
-        // "empty"
-        ID_EMPTY,
-        // "true"
-        ID_TRUE,
-        // "false"
-        ID_FALSE,
-        // "eql"
-        ID_EQL,
-        // "neq"
-        ID_NEQ,
-        // "gt"
-        ID_GT,
-        // "ge"
-        ID_GE,
-        // "lt"
-        ID_LT,
-        // "le"
-        ID_LE,
         // r"[a-z_][a-zA-Z_0-9]*"
         LowerIdent(&'a str),
         // r"[A-Z][a-zA-Z_0-9]*"
