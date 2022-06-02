@@ -113,7 +113,6 @@ fn yakker_ident() {
 
 #[test]
 fn yakker_basic_double_quotes() {
-    use expr::{Expr};
     {
         let s = r#""..""#;
         let lex = toyman::Lexer::new(s);
@@ -128,14 +127,12 @@ fn yakker_basic_double_quotes() {
 }
 #[test]
 fn yakker_basic_double_quotes_escapes() {
-    use expr::{Expr};
     assert_eq!(parse_from!(ExprParser r#""\"""#), Ok("\"".into()));
     assert_eq!(parse_from!(ExprParser r#""\n""#), Ok("\n".into()));
 }
 
 #[test]
 fn yakker_basic_single_quotes() {
-    use expr::{Expr};
     assert_eq!(parse_from!(RegularRightSideParser r"'c'"), Ok(RegularRightSide::Term("c".into())));
     assert_eq!(parse_from!(RegularRightSideParser r"'c''d'"),
                Ok(RegularRightSide::Concat(Box::new(RegularRightSide::Term("c".into())),

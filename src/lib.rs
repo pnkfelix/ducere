@@ -6,8 +6,14 @@ pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
 mod luthor;
 pub mod transducer;
+pub mod earley;
 
 pub use toyman::{Lexer, Tok};
+
+// identity macro that is one character away from dbg.
+macro_rules! nbg {
+    ($x:expr) => { $x }
+}
 
 mod toyman {
     use super::{luthor, Spanned, YakkerError};
@@ -28,9 +34,9 @@ mod toyman {
             use luthor::TokKind as K;
 
             loop {
-                let x = if let Some(x) = dbg!(self.0.next()) { x } else { return None; };
-                let (i, x, j) = match x { Ok(x) => dbg!(x), Err(e) => { return Some(Err(YakkerError::Lex(e))); } };
-                let c = dbg!(x.data()).chars().next().unwrap();
+                let x = if let Some(x) = nbg!(self.0.next()) { x } else { return None; };
+                let (i, x, j) = match x { Ok(x) => nbg!(x), Err(e) => { return Some(Err(YakkerError::Lex(e))); } };
+                let c = nbg!(x.data()).chars().next().unwrap();
                 let tok = match (*x.data(), x.kind()) {
                     (s, K::Bracket) => {
                         Tok::Bracket(s)
@@ -51,7 +57,7 @@ mod toyman {
                     }
 
                     (s, K::Quote(Quoted { sharp_count: _, delim: Delims(c1, c2), content: _ })) => {
-                        dbg!(Tok::QuoteLit(*c1, &s[1..(s.len()-1)], *c2))
+                        nbg!(Tok::QuoteLit(*c1, &s[1..(s.len()-1)], *c2))
                     }
 
                     (_, K::Space) => {
@@ -60,14 +66,14 @@ mod toyman {
                     }
 
                     (s, K::Word(Word::Id(_))) if s.chars().next().unwrap().is_uppercase() => {
-                        dbg!(Tok::UpperIdent(s))
+                        nbg!(Tok::UpperIdent(s))
                     }
                     (s, K::Word(Word::Id(_))) => {
                         assert!(c == '_' || c.is_lowercase());
                         Tok::LowerIdent(s)
                     }
                 };
-                return Some(Ok(dbg!((i, tok, j))));
+                return Some(Ok(nbg!((i, tok, j))));
             }
         }
     }
@@ -230,7 +236,7 @@ pub mod expr {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub enum BinOp { Add, Sub, Mul, Div, Gt, Ge, Lt, Le, Eql, Neq }
 
-    #[derive(PartialEq, Eq, Clone, Debug)]
+    #[derive(PartialEq, Eq, Hash, Clone, Debug)]
     pub struct Var(pub String);
 
     // pub const Y_0: Var = Var("Y_0".into());
@@ -239,7 +245,7 @@ pub mod expr {
     #[derive(PartialEq, Eq, Clone, Debug)]
     pub enum Expr { Var(Var), Lit(Val), BinOp(BinOp, Box<Expr>, Box<Expr>) }
 
-    #[derive(PartialOrd, Ord, PartialEq, Eq, Clone, Debug)]
+    #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
     pub enum Val { Bool(bool), Unit, String(String), Int(i64), }
 
     pub const TRUE: Val = Val::Bool(true);
@@ -286,15 +292,25 @@ pub mod expr {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, PartialEq, Eq, Hash)]
     pub struct Env(Vec<(Var, Val)>);
+
+    impl std::fmt::Debug for Env {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(w, "[")?;
+            for (var, val) in &self.0 {
+                write!(w, "{:?}={:?}", var, val)?
+            }
+            write!(w, "]")
+        }
+    }
 
     impl Env {
         pub fn empty() -> Self { Env(vec![]) }
 
         pub fn bind(x: Var, v: Val) -> Self { Env(vec![(x, v)]) }
 
-        pub fn extend(&mut self, x: Var, v: Val) -> &Self {
+        pub fn extend(&mut self, x: Var, v: Val) -> &mut Self {
             self.0.retain(|(x_, _v_)| x_ != &x);
             self.0.push((x, v));
             self
@@ -516,8 +532,35 @@ fn nonterminal_free<T>(v: &[AbstractNode<T>]) -> bool {
 
 pub struct Sentential(pub Vec<AbstractNode<()>>);
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Tree(pub Vec<AbstractNode<Tree>>);
+
+thread_local! {
+    pub static WITHIN_TREE: std::cell::RefCell<bool> = std::cell::RefCell::new(false);
+}
+
+impl std::fmt::Debug for Tree {
+    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+        WITHIN_TREE.with(|within_tree| {
+            {
+                let mut within_tree = within_tree.borrow_mut();
+                if !*within_tree {
+                    write!(w, "Tree")?;
+                }
+                *within_tree = true;
+            }
+            write!(w, "(")?;
+            for node in &self.0 {
+                write!(w, "{:?}", node)?;
+            }
+            {
+                let mut within_tree = within_tree.borrow_mut();
+                *within_tree = false;
+            }
+            write!(w, ")")
+        })
+    }
+}
 
 impl Tree {
     pub fn extend_term(&mut self, term: Term) {

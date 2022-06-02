@@ -196,12 +196,16 @@ impl<S> Tok<S> {
     }
 }
 
-pub type TokStr<'a> = Tok<&'a str>;
+// I want to make it easy to flip dbg! on and off, so I'm using nbg as an
+// identity macro that is one character away from dbg.
+macro_rules! nbg {
+    ($x:expr) => { $x }
+}
 
 impl Tok<(usize, usize)> {
     fn repackage<'a>(self, data: &'a str) -> (usize, Tok<&'a str>, usize) {
         let (i, j) = self.1;
-        dbg!((i, Tok(self.0, &data[i..=j]), j+1))
+        nbg!((i, Tok(self.0, &data[i..=j]), j+1))
     }
 }
 
@@ -311,32 +315,31 @@ impl<'input> Lexer<'input> {
             let p: Option<char> = self.chars.peek().map(|(_, c)|*c);
             let p = match p {
                 // we're done reading input; finalize and return this token.
-                None => return dbg!(Some(dbg!(r.finalize((spanned_start, i))).map(|t|t.repackage(data)))),
+                None => return nbg!(Some(nbg!(r.finalize((spanned_start, i))).map(|t|t.repackage(data)))),
                 Some(p) => p,
             };
             match r.action(p) {
                 RegAction::Continue => {
                     ic = self.chars.next().unwrap();
-                    dbg!(ic);
+                    // nbg!(ic);
                     let c = ic.1;
                     assert_eq!(c, p);
                     buf.push(c);
                     continue;
                 }
                 RegAction::Complete => {
-                    return dbg!(Some(dbg!(r.finalize(dbg!((spanned_start, i)))).map(|t|t.repackage(data))));
+                    return nbg!(Some(nbg!(r.finalize(nbg!((spanned_start, i)))).map(|t|t.repackage(data))));
                 }
             }
         }
     }
 
     fn read_quotation(&mut self, ic: (usize, char)) -> Option<<Self as Iterator>::Item> {
-        let (i, c) = dbg!(ic);
+        let (i, c) = nbg!(ic);
         let spanned_start = i;
-        let content_start = i+1;
         let end_delim_set = simple_delimiter(c).unwrap();
         loop {
-            let opt_ic = dbg!(self.chars.next());
+            let opt_ic = nbg!(self.chars.next());
             let ic = match opt_ic {
                 None => return Some(Err(LexicalError::UnterminatedQuote)),
                 Some((_, '\\')) => {
@@ -352,13 +355,12 @@ impl<'input> Lexer<'input> {
             let c = ic.1;
 
             if end_delim_set.contains(&c) {
-                let content_end = ic.0-1;
                 let tok = Tok(TokKind::Quote(Quoted {
                     sharp_count: None,
                     delim: Delims(ic.1, c),
                     content: (),
-                }), dbg!(&self.input[spanned_start..=ic.0]));
-                return Some(Ok(dbg!((spanned_start, tok, ic.0))));
+                }), nbg!(&self.input[spanned_start..=ic.0]));
+                return Some(Ok(nbg!((spanned_start, tok, ic.0))));
             }
         }
     }
@@ -432,7 +434,7 @@ impl<'input> Lexer<'input> {
                             delim: Delims(base_open_delim, c),
                             content: (),
                         }), &self.input[content_start..=content_end]);
-                        return dbg!(Some(Ok((spanned_start, tok, i))));
+                        return nbg!(Some(Ok((spanned_start, tok, i))));
                     }
                     let opt_ip = self.chars.peek().cloned();
                     if opt_ip.map(|(_, p)|p) == Some('#') {
@@ -474,13 +476,13 @@ impl<'input> Iterator for Lexer<'input> {
         let p: Option<char> = self.chars.peek().map(|(_, c)|*c);
         match (c, p) {
             ('r', Some(p)) if (p == '#' || raw_quoted_opener(p).is_some()) => {
-                dbg!(self.read_raw_quotation((i, c), p))
+                nbg!(self.read_raw_quotation((i, c), p))
             }
             ('"', _) | ('\'', _) => {
-                dbg!(self.read_quotation((i, c)))
+                nbg!(self.read_quotation((i, c)))
             }
             _ =>
-                dbg!(self.read_regular((i, c)))
+                nbg!(self.read_regular((i, c)))
         }
     }
 }

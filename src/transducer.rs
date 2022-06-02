@@ -40,13 +40,18 @@ pub struct Transducer {
 }
 
 impl Transducer {
+    pub fn start_state(&self) -> State {
+        // FIXME this is so uninitutive.
+        State(1)
+    }
+
     pub fn data(&self, state: State) -> &StateData {
         &self.states[&state]
     }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct State(usize);
+pub struct State(pub(crate) usize);
 
 #[derive(Debug)]
 pub struct StateData {
@@ -68,6 +73,47 @@ impl StateData {
     }
     pub fn output_if_final(&self) -> Option<&[NonTerm]> {
         self.output_if_final.as_ref().map(|v| &v[..])
+    }
+}
+
+impl StateData {
+    pub fn term_transitions(&self, t1: &Term) -> impl Iterator<Item=&State> {
+        let t1 = t1.clone();
+        self.transitions.iter().filter_map(move |(a, s)| {
+            if let Action::Term(t2) = a {
+                if &t1 == t2 { Some(s) } else { None }
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn pred_transitions(&self) -> impl Iterator<Item=(&Expr, &State)> {
+        self.transitions.iter().filter_map(|(a, s)| {
+            if let Action::Constraint(expr) = a { Some((expr, s)) } else { None }
+        })
+    }
+    pub fn bind_transitions(&self) -> impl Iterator<Item=((&Var, &Expr), &State)> {
+        self.transitions.iter().filter_map(|(a, s)| {
+            if let Action::Binding(v, e) = a {
+                Some(((v, e), s))
+            } else {
+                None
+            }
+        })
+    }
+    pub fn nonterm_transitions<'a>(&'a self, any_of_nt: &'a [NonTerm]) -> impl Iterator<Item=((&Option<Var>, &NonTerm, &Option<Expr>), &State)> {
+        self.transitions.iter().filter_map(|(a, s)| {
+            if let Action::NonTerm(opt_x, nt, opt_e) = a {
+                if any_of_nt.contains(nt) {
+                    Some(((opt_x, nt, opt_e), s))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -161,4 +207,4 @@ impl StateBuilder {
 // sibling (or in this case, nibling) module would not have access to.
 #[cfg(test)]
 #[path = "tests/transducer.rs"]
-mod tests_for_transducer;
+pub(crate) mod tests_for_transducer;

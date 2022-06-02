@@ -79,6 +79,8 @@ impl TransducerConfigFrame {
 pub struct TransducerConfig(pub(crate) Vec<TransducerConfigFrame>);
 
 impl TransducerConfig {
+    // FIXME: the (default) start state should be a property attached the
+    // transducer itself
     pub fn fresh(start: State, env: expr::Env) -> Self {
         TransducerConfig(vec![TransducerConfigFrame {
             call_context: start,
