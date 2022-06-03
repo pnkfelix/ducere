@@ -7,6 +7,7 @@ use crate::Term;
 use crate::earley::Earley;
 
 use std::collections::HashMap;
+use linear_map::LinearMap;
 
 /// EarleyKey(i,j,q,E,s) is used to identify individual tree-sets in the
 /// early-set-structure.
@@ -24,19 +25,14 @@ use std::collections::HashMap;
 /// The right answer is probably to leave the `expr::Env` out of the *key*,
 /// but keep it in the associated elements for determining lookup.
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct EarleyKey(usize, usize, State, State, Finality);
+struct EarleyKey(usize, usize, State);
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Finality { Accept, Go }
 
 impl std::fmt::Debug for EarleyKey {
     fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self.4 {
-            Finality::Accept =>
-                write!(w, "EarleyKey({},{},{},({}))", self.0, self.1, (self.2).0, (self.3).0),
-            Finality::Go =>
-                write!(w, "EarleyKey({},{},{},{})", self.0, self.1, (self.2).0, (self.3).0),
-        }
+        write!(w, "EarleyKey({},{},{})", self.0, self.1, (self.2).0)
     }
 }
 
@@ -73,7 +69,9 @@ impl EarleyTrees {
 
 }
 
-type EarleyMap = HashMap<EarleyKey, HashMap<(expr::Env, State, Finality), Vec<Tree>>>;
+type CellMap<K,V> = LinearMap<K,V>;
+
+type EarleyMap = HashMap<EarleyKey, CellMap<(expr::Env, State, Finality), Vec<Tree>>>;
 type IJ = (usize, usize);
 
 trait IndexPair {
@@ -167,10 +165,9 @@ impl EarleyConfig {
         let q_0 = earley.transducer().start_state();
         let env = expr::Env::bind(x, v);
 
-        let env_trees: HashMap<_, _> = vec![(((env, q_0, finality(&earley, q_0))), vec![Tree(vec![])])].into_iter().collect();
+        let env_trees: CellMap<_, _> = vec![(((env, q_0, finality(&earley, q_0))), vec![Tree(vec![])])].into_iter().collect();
         let mut trees_0_0 = HashMap::new();
-        let f = finality(&earley, q_0);
-        trees_0_0.insert(EarleyKey(0, 0, q_0, q_0, f), env_trees);
+        trees_0_0.insert(EarleyKey(0, 0, q_0), env_trees);
         let trees = EarleyTrees(vec![vec![trees_0_0]]);
         EarleyConfig { earley, trees, len: 0, step_count: 0, step_rule_count: 0 }
     }
@@ -228,20 +225,21 @@ impl EarleyConfig {
 
         for i in 0..j {
             let (tree_i_jsub1, tree_i_j) = self.trees.get_maps_mut((i, j-1), (i, j));
-            for (&EarleyKey(_, _, q, r, _), ref env_trees) in tree_i_jsub1 {
-                for (env, trees) in env_trees.iter() {
+            for (&EarleyKey(_, _, q), ref env_trees) in tree_i_jsub1 {
+                for (&(ref env, r, _), trees) in env_trees.iter() {
                     // FIXME StateData API should let one do action-filtered lookup
                     for &s in self.earley.transducer().data(r).term_transitions(&t) {
+                        let f = finality(&self.earley, s);
                         for tree in trees.iter() {
                             let mut tree = tree.clone();
                             tree.extend_term(t.clone());
-                            let f = finality(&self.earley, s);
-                            let key = EarleyKey(i, j, q, s, f);
+                            let key = EarleyKey(i, j, q);
                             let env_trees = tree_i_j
                                 .entry(key.clone())
-                                .or_insert(HashMap::new());
-                            env_trees.entry(env.clone()).or_insert(vec![]);
-                            let cell = env_trees.get_mut(env).unwrap();
+                                .or_insert(CellMap::new());
+                            let env_state = (env.clone(), s, f);
+                            env_trees.entry(env_state.clone()).or_insert(vec![]);
+                            let cell = env_trees.get_mut(&env_state).unwrap();
                             if !cell.contains(&tree) {
                                 cell.push(tree);
                                 dbg!(key);
@@ -269,12 +267,12 @@ impl EarleyConfig {
         for i in 0..=j {
             let mut to_add: Vec<(EarleyKey, (expr::Env, State, Finality), Vec<Tree>)> = Vec::new();
             let tree_i_j = self.trees.get_map_mut((i, j));
-            for (&EarleyKey(_, _, q, r, _), env_trees) in &*tree_i_j {
-                for ((ref env, _r_, _), trees) in env_trees.iter() {
+            for (&EarleyKey(_, _, q), env_trees) in &*tree_i_j {
+                for (&(ref env, r, _), trees) in env_trees.iter() {
                     for (e, &s) in self.earley.transducer().data(r).pred_transitions() {
                         if let expr::Val::Bool(true) = e.eval(env) {
                             let f = finality(&self.earley, s);
-                            to_add.push((EarleyKey(i, j, q, s, f),
+                            to_add.push((EarleyKey(i, j, q),
                                          ((*env).clone(), s, f),
                                          trees.clone()));
                         }
@@ -283,7 +281,7 @@ impl EarleyConfig {
             }
 
             for (key, env, trees_to_add) in to_add {
-                let trees = tree_i_j.entry(key).or_insert(HashMap::new());
+                let trees = tree_i_j.entry(key).or_insert(CellMap::new());
                 trees.entry(env.clone()).or_insert(vec![]);
                 for tree in trees_to_add {
                     let cell = trees.get_mut(&env).unwrap();
@@ -314,9 +312,9 @@ impl EarleyConfig {
             let mut to_add: Vec<(EarleyKey, (expr::Env, State, Finality), Tree)> = Vec::new();
             let tree_i_j = self.trees.get_map_mut((i, j));
             // dbg!(&tree_i_j);
-            for (&EarleyKey(_, _, q, r, _), ref env_trees) in &*tree_i_j {
+            for (&EarleyKey(_, _, q), ref env_trees) in &*tree_i_j {
                 // dbg!((i,q,r));
-                for ((ref env, _r_, _), trees) in env_trees.iter() {
+                for (&(ref env, r, _), trees) in env_trees.iter() {
                     // dbg!((i,q,r,env));
                     for ((x, e), &s) in self.earley.transducer().data(r).bind_transitions() {
                         // dbg!((i,q,r,env,x,e,s));
@@ -328,7 +326,7 @@ impl EarleyConfig {
                             let mut t = t.clone();
                             t.extend_bind(x.clone(), v.clone());
                             let f = finality(&self.earley, s);
-                            to_add.push((EarleyKey(i, j, q, s, f),
+                            to_add.push((EarleyKey(i, j, q),
                                          (env.clone(), s, f),
                                          t));
                         }
@@ -336,7 +334,7 @@ impl EarleyConfig {
                 }
             }
             for (key, env_state, tree) in to_add {
-                let trees = tree_i_j.entry(key).or_insert(HashMap::new());
+                let trees = tree_i_j.entry(key).or_insert(CellMap::new());
                 trees.entry(env_state.clone()).or_insert(vec![]);
                 let cell = trees.get_mut(&env_state).unwrap();
                 if !cell.contains(&tree) {
@@ -377,14 +375,14 @@ impl EarleyConfig {
         for i in 0..=j {
             let mut to_add = Vec::new();
             let tree_i_j = self.trees.get_map_mut((i, j));
-            for (&EarleyKey(_, _, _q, r, _), env_trees) in &*tree_i_j {
-                for ((ref env, _r_, _), trees) in env_trees.iter() {
+            for (&EarleyKey(_, _, _q), env_trees) in &*tree_i_j {
+                for (&(ref env, r, _), trees) in env_trees.iter() {
                     if trees.len() == 0 { continue; }
                     for &(ref e, s) in self.earley.transducer().data(r).calls() {
                         let v = e.eval(env);
                         let new_env = expr::Env::bind(expr::y_0(), v);
                         let f = finality(&self.earley, s);
-                        let key = EarleyKey(j, j, s, s, f);
+                        let key = EarleyKey(j, j, s);
                         to_add.push((key, (new_env, s, f), Tree(vec![])));
                     }
                 }
@@ -392,7 +390,7 @@ impl EarleyConfig {
 
             let tree_j_j = self.trees.get_map_mut((j, j));
             for (key, env_state, tree) in to_add {
-                let trees = tree_j_j.entry(key).or_insert(HashMap::new());
+                let trees = tree_j_j.entry(key).or_insert(CellMap::new());
                 trees.entry(env_state.clone()).or_insert(vec![]);
                 let cell = trees.get_mut(&env_state).unwrap();
                 if !cell.contains(&tree) {
@@ -427,11 +425,11 @@ impl EarleyConfig {
 
             for k in 0..=j {
                 let tree_k_j = self.trees.map((k, j));
-                for (&EarleyKey(_, _, s, t, _), env_trees_2) in tree_i_j {
-                    for ((ref env_2, _t_, _), trees_2) in env_trees_2.iter() {
+                for (&EarleyKey(_, _, s), env_trees_2) in tree_i_j {
+                    for (&(ref env_2, t, _), trees_2) in env_trees_2.iter() {
                         for &(ref e_1, q) in transducer.data(t).calls() {
-                            for (&EarleyKey(_, _, q_, r, _), env_trees_1) in tree_k_j {
-                                for ((ref env_1, _r_, _), trees_1) in env_trees_1.iter() {
+                            for (&EarleyKey(_, _, q_,), env_trees_1) in tree_k_j {
+                                for (&(ref env_1, r, _), trees_1) in env_trees_1.iter() {
                                     // FIXME: there should be a better way to zero in on
                                     // specific cases of `q` as start state and `r` is a
                                     // accepted state.
@@ -466,7 +464,7 @@ impl EarleyConfig {
                                                     env_2.extend(x, expr::Val::String(t_1.leaves().iter().map(|x|x.as_ref()).collect()));
                                                 }
                                                 let f = self.finality(u);
-                                                let key = EarleyKey(i, j, s, u, f);
+                                                let key = EarleyKey(i, j, s);
                                                 to_add.push((key, (env_2.clone(), u, f), t_2));
                                             }
                                         }
@@ -479,7 +477,7 @@ impl EarleyConfig {
             }
             for (key, env_2, t_2) in to_add {
                 let tree_i_j = self.trees.get_map_mut((i, j));
-                let trees = tree_i_j.entry(key).or_insert(HashMap::new());
+                let trees = tree_i_j.entry(key).or_insert(CellMap::new());
                 trees.entry(env_2.clone()).or_insert(vec![]);
                 let cell = trees.get_mut(&env_2).unwrap();
                 if !cell.contains(&t_2) {
