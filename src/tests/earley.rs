@@ -15,5 +15,4 @@ fn imperative_fixed_width_integer() {
     dbg!(config.dyn_state());
     config.step(Term::C('1'));
     dbg!(config.dyn_state());
-    assert!(false);
 }

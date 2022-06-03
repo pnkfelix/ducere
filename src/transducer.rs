@@ -50,8 +50,14 @@ impl Transducer {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct State(pub(crate) usize);
+
+impl std::fmt::Debug for State {
+    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(w, "State({})", self.0)
+    }
+}
 
 #[derive(Debug)]
 pub struct StateData {

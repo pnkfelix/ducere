@@ -513,12 +513,38 @@ impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Parsed<X> { var: Option<expr::Var>, nonterm: NonTerm, input: expr::Val, payload: X }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum AbstractNode<X> {
     Term(Term),
     Binding(Binding),
     BlackBox(BlackBox),
     Parse(Parsed<X>),
+}
+
+impl<X: std::fmt::Debug> std::fmt::Debug for AbstractNode<X> {
+    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            AbstractNode::Term(t) => { write!(w, "\"{}\"", t.string() ) }
+            AbstractNode::Binding(b) => { write!(w, "{{{}:={}}}", (b.0).0, b.1) }
+            AbstractNode::BlackBox(bb) => { write!(w, "<{}>", bb.0) }
+            AbstractNode::Parse(p) => {
+                match (&p.var, &p.input) {
+                    (None, expr::Val::Unit) => {
+                        write!(w, "{} := {:?}", p.nonterm.0, p.payload)
+                    }
+                    (None, input) => {
+                        write!(w, "{}({}) := {:?}", p.nonterm.0, input, p.payload)
+                    }
+                    (Some(var), expr::Val::Unit) => {
+                        write!(w, "{}:{} := {:?}", var.0, p.nonterm.0, p.payload)
+                    }
+                    (Some(var), input) => {
+                        write!(w, "{}:{}({}) := {:?}", var.0, p.nonterm.0, input, p.payload)
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn nonterminal_free<T>(v: &[AbstractNode<T>]) -> bool {
