@@ -558,13 +558,10 @@ fn nonterminal_free<T>(v: &[AbstractNode<T>]) -> bool {
 
 pub struct Sentential(pub Vec<AbstractNode<()>>);
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Tree(pub Vec<AbstractNode<Tree>>);
 
-thread_local! {
-    pub static WITHIN_TREE: std::cell::RefCell<bool> = std::cell::RefCell::new(false);
-}
-
+#[cfg(not_now)]
 impl std::fmt::Debug for Tree {
     fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
         WITHIN_TREE.with(|within_tree| {

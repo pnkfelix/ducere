@@ -2,7 +2,7 @@ use std::collections::{HashMap};
 use crate::{Blackbox, NonTerm, Term};
 use crate::expr::{Expr, Var}/*}*/;  // check out the (bad) error you get with that uncommented.
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Action {
     Term(Term),
     Constraint(Expr),
@@ -35,6 +35,7 @@ impl NonTermSpec for (NonTerm, Expr) {
     fn components(self) -> (Option<Var>, NonTerm, Option<Expr>) { (None, self.0, Some(self.1)) }
 }
 
+#[derive(Clone, Debug)]
 pub struct Transducer {
     pub(crate) states: HashMap<State, StateData>,
 }
@@ -59,7 +60,7 @@ impl std::fmt::Debug for State {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct StateData {
     label: String,
     param_name: Option<Var>,

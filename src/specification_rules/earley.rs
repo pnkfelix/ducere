@@ -41,6 +41,7 @@ impl std::fmt::Debug for EarleyKey {
 // Rust).
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct EarleyConfig {
     earley: Earley, // This could (and should?) be a reference.
     trees: EarleyTrees,

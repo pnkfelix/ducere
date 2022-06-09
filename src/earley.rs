@@ -21,6 +21,7 @@ use crate::transducer::{Transducer};
 #[path = "tests/earley.rs"]
 mod tests_for_earley;
 
+#[derive(Debug)]
 pub struct Earley {
     #[allow(dead_code)] 
     transducer: Transducer,
