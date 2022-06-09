@@ -339,13 +339,13 @@ pub mod expr {
     }
 
     impl Expr {
-        pub fn eval(&self, env: &Env) -> Val {
+        pub fn eval(&self, env: &Env, ctxt: &dyn std::fmt::Debug) -> Val {
             match self {
-                Expr::Var(x) => env.lookup(x).unwrap_or_else(|| panic!("failed lookup: {:?}", x)).clone(),
+                Expr::Var(x) => env.lookup(x).unwrap_or_else(|| panic!("failed lookup: {:?} in {:?}", x, ctxt)).clone(),
                 Expr::Lit(v) => v.clone(),
                 Expr::BinOp(op, e1, e2) => {
-                    let lhs = e1.eval(env);
-                    let rhs = e2.eval(env);
+                    let lhs = e1.eval(env, ctxt);
+                    let rhs = e2.eval(env, ctxt);
                     match op {
                         BinOp::Add => lhs + rhs,
                         BinOp::Sub => lhs - rhs,

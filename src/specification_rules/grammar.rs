@@ -109,7 +109,7 @@ impl Grammar {
                 },
             // GL-PRED
             RegularRightSide::Constraint(e) =>
-                if e.eval(&env) == expr::TRUE {
+                if e.eval(&env, &(file!(), line!())) == expr::TRUE {
                     (Some(expr::Env::empty()).b_iter(), accum)
                 } else {
                     (None.b_iter(), accum)
@@ -117,13 +117,13 @@ impl Grammar {
             // GL-BIND
             RegularRightSide::Binding { x, e } =>
                 if w.len() == 0 {
-                    (Some(expr::Env::bind(x.clone(), e.eval(&env))).b_iter(), accum)
+                    (Some(expr::Env::bind(x.clone(), e.eval(&env, &(file!(), line!())))).b_iter(), accum)
                 } else {
                     (None.b_iter(), accum)
                 },
             // GL-φ
             RegularRightSide::Blackbox(bb, e) => {
-                let v = e.eval(&env);
+                let v = e.eval(&env, &(file!(), line!()));
                 let phi = (bb.from_val)(v);
                 // The BB interface is iterator based; but the spec for GL-φ
                 // implies that the whole string must be matched. We ensure this
@@ -155,12 +155,12 @@ impl Grammar {
                         // great: non-parameterized terminals don't need values
                         expr::Env::empty(),
                     (Some(e), Some(y_0)) => {
-                        let v = e.eval(&env);
+                        let v = e.eval(&env, &(file!(), line!()));
                         expr::Env::bind(y_0.clone(), v)
                     }
                     (Some(e), None) => {
                         // not as great: I'd prefer to not use y_0 formalism.
-                        let v = e.eval(&env);
+                        let v = e.eval(&env, &(file!(), line!()));
                         expr::Env::bind(expr::y_0(), v)
                     }
                     (None, Some(y_0)) => {

@@ -187,7 +187,7 @@ impl Transducer {
                     }
                 }
                 Action::Constraint(e) => {
-                    if e.eval(&tip.env) == expr::Val::Bool(true) {
+                    if e.eval(&tip.env, &(file!(), file!())) == expr::Val::Bool(true) {
                         let mut tip = tip.clone();
                         tip.match_pred(&e, state);
                         accum.push((tail.clone().respool(tip), 0));
@@ -197,13 +197,13 @@ impl Transducer {
                 }
                 &Action::Binding(ref x, ref e) => {
                     assert_ne!(x, &expr::y_0());
-                    let val = e.eval(&tip.env);
+                    let val = e.eval(&tip.env, &(file!(), line!()));
                     let mut tip = tip.clone();
                     tip.match_bind(x.clone(), e, val, state);
                     accum.push((tail.clone().respool(tip), 0));
                 }
                 Action::Blackbox(_bb, e) => {
-                    let _val = e.eval(&tip.env);
+                    let _val = e.eval(&tip.env, &(file!(), line!()));
                     unimplemented!();
                 }
                 Action::NonTerm(..) => {
@@ -217,7 +217,7 @@ impl Transducer {
 
         // Call transitions, i.e. S-Call
         for &(ref expr, state) in r.calls() {
-            let val = expr.eval(&tip.env);
+            let val = expr.eval(&tip.env, &(file!(), line!()));
             let callee = self.data(state);
             let y_0 = callee.formal_param().cloned().unwrap_or(expr::y_0());
             let next = TransducerConfigFrame::call(state, y_0, &expr, val);
@@ -235,7 +235,7 @@ impl Transducer {
                     Action::NonTerm(x, nt, e) if returning.contains(nt) => (x, nt, e),
                     _ => continue,
                 };
-                let v = if let Some(e) = e { e.eval(&caller.env) } else { ().into() };
+                let v = if let Some(e) = e { e.eval(&caller.env, &(file!(), line!())) } else { ().into() };
                 let y_0 = self.data(tip.call_context).formal_param().cloned().unwrap_or(expr::y_0());
                 if Some(&v) != tip.env.lookup(&y_0) {
                     continue;

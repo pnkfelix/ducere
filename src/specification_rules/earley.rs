@@ -271,7 +271,7 @@ impl EarleyConfig {
             for (&EarleyKey(_, _, q), env_trees) in &*tree_i_j {
                 for (&(ref env, r, _), trees) in env_trees.iter() {
                     for (e, &s) in self.earley.transducer().data(r).pred_transitions() {
-                        if let expr::Val::Bool(true) = e.eval(env) {
+                        if let expr::Val::Bool(true) = e.eval(env, &(file!(), line!())) {
                             let f = finality(&self.earley, s);
                             to_add.push((EarleyKey(i, j, q),
                                          ((*env).clone(), s, f),
@@ -319,7 +319,7 @@ impl EarleyConfig {
                     // dbg!((i,q,r,env));
                     for ((x, e), &s) in self.earley.transducer().data(r).bind_transitions() {
                         // dbg!((i,q,r,env,x,e,s));
-                        let v = e.eval(env);
+                        let v = e.eval(env, &(file!(), line!()));
                         let mut env = (*env).clone();
                         env.extend(x.clone(), v.clone());
                         for t in trees {
@@ -380,8 +380,12 @@ impl EarleyConfig {
                 for (&(ref env, r, _), trees) in env_trees.iter() {
                     if trees.len() == 0 { continue; }
                     for &(ref e, s) in self.earley.transducer().data(r).calls() {
-                        let v = e.eval(env);
-                        let new_env = expr::Env::bind(expr::y_0(), v);
+                        let v = e.eval(env, &(file!(), line!()));
+                        let param = match self.earley.transducer().data(s).formal_param() {
+                            Some(v) => v.clone(),
+                            None => expr::y_0(),
+                        };
+                        let new_env = expr::Env::bind(param, v);
                         let f = finality(&self.earley, s);
                         let key = EarleyKey(j, j, s);
                         to_add.push((key, (new_env, s, f), Tree(vec![])));
@@ -447,9 +451,13 @@ impl EarleyConfig {
                                         let unit: expr::Expr = ().into();
                                         let e_2 = if let Some(e) = opt_e { e } else { &unit };
                                         let v = {
-                                            let v_0 = expr::Expr::Var(expr::y_0()).eval(env_1);
-                                            let v_1 = e_1.eval(env_2);
-                                            let v_2 = e_2.eval(env_2);
+                                            let param = match self.earley.transducer().data(q).formal_param() {
+                                                Some(x) => x.clone(),
+                                                None => expr::y_0(),
+                                            };
+                                            let v_0 = expr::Expr::Var(param).eval(env_1, &(file!(), line!()));
+                                            let v_1 = e_1.eval(env_2, &(file!(), line!()));
+                                            let v_2 = e_2.eval(env_2, &(file!(), line!()));
                                             if v_0 == v_1 && v_1 == v_2 {
                                                 v_0
                                             } else {
