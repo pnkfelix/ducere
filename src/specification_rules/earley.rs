@@ -178,16 +178,29 @@ impl EarleyConfig {
         let len = self.len;
         self.step_count += 1;
         loop {
-            let changed = self.apply_rules(t.clone());
+            let changed = self.apply_nonprogressive_rules();
             if let Changed::Unchanged = changed {
                 break;
             }
         }
 
-        assert_eq!(len + 1, self.len);
+        assert_eq!(len, self.len);
+
+        let changed = self.apply_progressive_rules(t.clone());
+
+        if let Changed::Changed = changed {
+            assert_eq!(len + 1, self.len);
+            loop {
+                let changed = self.apply_nonprogressive_rules();
+                if let Changed::Unchanged = changed {
+                    break;
+                }
+            }
+            assert_eq!(len + 1, self.len);
+        }
     }
 
-    fn apply_rules(&mut self, t: Term) -> Changed {
+    fn apply_nonprogressive_rules(&mut self) -> Changed {
         self.step_rule_count += 1;
         dbg!((self.step_count, self.step_rule_count));
         // FIXME would overloading `?` be a good thing here?
@@ -197,13 +210,13 @@ impl EarleyConfig {
         if let Changed::Changed = dbg!(self.apply_et_call()) { return Changed::Changed; }
         if let Changed::Changed = dbg!(self.apply_et_return()) { return Changed::Changed; }
 
-        // The order here *might* matter. In particular; if this `if let` came
-        // first in the series, then I am not sure if that might make us skip
-        // certain paths through the state machine. (But also, this rules
-        // application strategy is itself worrisome; it seems like it could get
-        // stuck applying the same rule over and over if the transducer has a
-        // self-loop.)
-        if let Changed::Changed = dbg!(self.apply_et_term(t)) { self.len += 1; return Changed::Changed; }
+        return Changed::Unchanged;
+    }
+
+    fn apply_progressive_rules(&mut self, t: Term) -> Changed {
+        if let Changed::Changed = self.apply_et_term(t) {
+            self.len += 1; return Changed::Changed;
+        }
 
         return Changed::Unchanged;
     }
