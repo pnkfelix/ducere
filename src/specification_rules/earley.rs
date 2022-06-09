@@ -428,9 +428,10 @@ impl EarleyConfig {
             let tree_i_j = self.trees.map((i, j));
             let mut to_add = Vec::new();
 
-            for k in 0..=j {
+            for k in i..=j {
+                let tree_i_k = self.trees.map((i, k));
                 let tree_k_j = self.trees.map((k, j));
-                for (&EarleyKey(_, _, s), env_trees_2) in tree_i_j {
+                for (&EarleyKey(_, _, s), env_trees_2) in tree_i_k {
                     for (&(ref env_2, t, _), trees_2) in env_trees_2.iter() {
                         for &(ref e_1, q) in transducer.data(t).calls() {
                             for (&EarleyKey(_, _, q_,), env_trees_1) in tree_k_j {
