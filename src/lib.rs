@@ -593,6 +593,10 @@ impl std::fmt::Debug for Tree {
     }
 }
 
+thread_local! {
+    pub static WITHIN_TREE: std::cell::RefCell<bool> = std::cell::RefCell::new(false);
+}
+
 impl Tree {
     pub fn extend_term(&mut self, term: Term) {
        self.0.push(AbstractNode::Term(term));
