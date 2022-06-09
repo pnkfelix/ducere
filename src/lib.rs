@@ -521,6 +521,9 @@ pub enum AbstractNode<X> {
     Parse(Parsed<X>),
 }
 
+// const NONTERM_BRACKETS: (char, char) = ('⟨', '⟩');
+const NONTERM_BRACKETS: (char, char) = ('(', ')');
+
 impl<X: std::fmt::Debug> std::fmt::Debug for AbstractNode<X> {
     fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -528,18 +531,23 @@ impl<X: std::fmt::Debug> std::fmt::Debug for AbstractNode<X> {
             AbstractNode::Binding(b) => { write!(w, "{{{}:={}}}", (b.0).0, b.1) }
             AbstractNode::BlackBox(bb) => { write!(w, "<{}>", bb.0) }
             AbstractNode::Parse(p) => {
+                let bd = NONTERM_BRACKETS;
                 match (&p.var, &p.input) {
                     (None, expr::Val::Unit) => {
-                        write!(w, "{} := {:?}", p.nonterm.0, p.payload)
+                        write!(w, "{NT}{b}{LOAD:?}{d}",
+                               b=bd.0, d=bd.1, NT=p.nonterm.0, LOAD=p.payload)
                     }
                     (None, input) => {
-                        write!(w, "{}({}) := {:?}", p.nonterm.0, input, p.payload)
+                        write!(w, "{NT}({IN}){b}{LOAD:?}{d}",
+                               b=bd.0, d=bd.1, NT=p.nonterm.0, IN=input, LOAD=p.payload)
                     }
                     (Some(var), expr::Val::Unit) => {
-                        write!(w, "{}:{} := {:?}", var.0, p.nonterm.0, p.payload)
+                        write!(w, "{VAR}:{NT}{b}{LOAD:?}{d}",
+                               b=bd.0, d=bd.1, VAR=var.0, NT=p.nonterm.0, LOAD=p.payload)
                     }
                     (Some(var), input) => {
-                        write!(w, "{}:{}({}) := {:?}", var.0, p.nonterm.0, input, p.payload)
+                        write!(w, "{VAR}:{NT}({IN}){b}{LOAD:?}{d}",
+                               b=bd.0, d=bd.1, VAR=var.0, NT=p.nonterm.0, IN=input, LOAD=p.payload)
                     }
                 }
             }
