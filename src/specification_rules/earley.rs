@@ -107,6 +107,7 @@ impl EarleyTrees {
         }
     }
 
+    #[track_caller]
     fn map(&self, (i, j): IJ) -> &EarleyMap {
         &self.0[j][i]
     }
