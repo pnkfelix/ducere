@@ -57,6 +57,23 @@ impl EarleyConfig {
     pub(crate) fn dyn_state(&self) -> (&EarleyTrees, usize) { (&self.trees, self.len) }
 }
 
+impl EarleyConfig {
+    pub fn accepting(&self, i: usize, j: usize) -> Option<Vec<Tree>> {
+        let map = &self.trees.0[j][i];
+        let cell = match map.get(&EarleyKey(i, j, self.earley.transducer().start_state())) {
+            None => return None,
+            Some(cell) => cell,
+        };
+        let trees: Vec<Tree> = cell.iter()
+            .filter_map(|((_, _, f), trees)| {
+                if f == &Finality::Accept { Some(trees.clone()) } else { None }
+            })
+            .flatten()
+            .collect();
+        Some(trees)
+    }
+}
+
 // FIXME: does the inner indexing on key.0 end up hurting more than it helps?
 // I'm currently traversing many i's to deal with it, though arguably that is
 // unavoidable unless on either starts using HashMaps and/or builds up queues to
