@@ -124,6 +124,8 @@ fn yakker_basic_double_quotes() {
     assert_eq!(parse_from!(ExprParser r#""xx""#), Ok("xx".into()));
     assert_eq!(parse_from!(ExprParser r#""x""#), Ok("x".into()));
     assert_eq!(parse_from!(ExprParser r#""""#), Ok("".into()));
+    assert_eq!(parse_from!(ExprParser r#""(""#), Ok("(".into()));
+    assert_eq!(parse_from!(ExprParser r#"")""#), Ok(")".into()));
 }
 #[test]
 fn yakker_basic_double_quotes_escapes() {
@@ -138,6 +140,8 @@ fn yakker_basic_single_quotes() {
                Ok(RegularRightSide::Concat(Box::new(RegularRightSide::Term("c".into())),
                                            Box::new(RegularRightSide::Term("d".into()))
                )));
+    assert_eq!(parse_from!(RegularRightSideParser r"'('"), Ok(RegularRightSide::Term("(".into())));
+    assert_eq!(parse_from!(RegularRightSideParser r"')'"), Ok(RegularRightSide::Term(")".into())));
 }
 #[test]
 fn yakker_nonterm() {
@@ -147,7 +151,6 @@ fn yakker_nonterm() {
 #[test]
 fn yakker_rules() {
     assert_eq!(parse_from!(RuleParser r"A::= 'c'"), Ok(Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("c".into()))));
-
     assert_eq!(parse_from!(GrammarParser r"A::= 'c'"), Ok(Grammar { rules: vec![Rule::labelled_new("0:1", "A".into(), None, RegularRightSide::Term("c".into()))]}));
     assert_eq!(parse_from!(GrammarParser r"A::= 'a';B::= 'b'"), Ok(Grammar {
         rules: vec![
@@ -250,6 +253,17 @@ fn left_factoring() {
 //
 //  digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 // number = digit digit*
+#[test]
+fn regular_right_sides_number_is_digit_digit_star() {
+    let g = parse_from!(GrammarParser "Digit ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'; Number ::= Digit Digit*;").unwrap();
+    assert!(g.matches(&input(""), &right_side("Digit")).no_parse());
+    assert!(g.matches(&input(""), &right_side("Number")).no_parse());
+    assert!(g.matches(&input("0"), &right_side("Digit")).has_parse());
+    assert!(g.matches(&input("0"), &right_side("Number")).has_parse());
+    assert!(g.matches(&input("01"), &right_side("Number")).has_parse());
+    assert!(g.matches(&input("10"), &right_side("Number")).has_parse());
+    assert!(g.matches(&input("98765433210"), &right_side("Number")).has_parse());
+}
 
 // Example: "Full context-free grammars"
 //
@@ -260,6 +274,25 @@ fn left_factoring() {
 //          | '(' expr ')'
 //          | identifier
 //          | ...
+//
+// FIXME: at some point, I think I'll want to factor things so that a grammar
+// can be independent of its lexer. I.e. that certain syntatic classes are
+// treated as entirely handled by the lexing pass. (I had originally thought
+// that I might handle this by having identifiers with an initial lower-case letter
+// denote classes defined by the lexer, but now I remember that part of the design
+// here, if I recall correctly, is that identifiers with an initial lower-case letter
+// denote Yakker variables.
+//
+// In any case, for now we deal with this by just having a naive identifier
+// grammar here in place.
+#[test]
+fn full_context_free_grammars() {
+    let g = parse_from!(GrammarParser "Typename ::= Identifier; Expr ::= '&' Expr | Expr '&' Expr | '(' Typename ')' Expr | '(' Expr ')' | Identifier; Identifier ::= Letter Letter*; Letter ::= 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' |'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v'| 'w' | 'x' | 'y' | 'z';").unwrap();
+    assert!(g.matches(&input("x"), &right_side("Letter")).has_parse());
+    assert!(g.matches(&input("x"), &right_side("Identifier")).has_parse());
+    assert!(g.matches(&input("x"), &right_side("Expr")).has_parse());
+}
+
 
 // Example: "Attribute-directed parsing"
 // literal8 = '~' '{' x:=number ('+' | epsilon) '}' { n := string2int(x) } CRLF ([n > 0] OCTET { n := n - 1 })* [n = 0]
