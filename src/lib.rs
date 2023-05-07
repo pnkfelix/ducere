@@ -222,7 +222,7 @@ impl RegularRightSide {
             RegularRightSide::Concat(lhs, rhs) => lhs.nullable(assume_nt).concat(rhs.nullable(assume_nt)),
             RegularRightSide::Either(lhs, rhs) => lhs.nullable(assume_nt).either(rhs.nullable(assume_nt)),
 
-            RegularRightSide::Kleene(inner) => Nullable,
+            RegularRightSide::Kleene(_inner) => Nullable,
         }
     }
 }
@@ -260,7 +260,6 @@ impl Nullability {
             (Nullable, _) => Nullable,
             (_, Nullable) => Nullable,
             (NonNullable, NonNullable) => NonNullable,
-            (Nullable, Unknown) => Unknown,
             (Unknown, NonNullable) => Unknown,
             (NonNullable, Unknown) => Unknown,
             (Unknown, Unknown) => Unknown,
