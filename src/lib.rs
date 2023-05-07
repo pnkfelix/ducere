@@ -1,4 +1,4 @@
-#[macro_use] extern crate lalrpop_util;
+ #[macro_use] extern crate lalrpop_util;
 
 use std::collections::HashSet;
 
@@ -204,6 +204,78 @@ impl RegularRightSide {
             RegularRightSide::Either(lhs, rhs) => Box::new(lhs.terms().chain(rhs.terms())),
 
             RegularRightSide::Kleene(inner) => inner.terms(),
+        }
+    }
+
+    fn nullable(&self, assume_nt: &impl Fn(&NonTerm) -> Nullability) -> Nullability {
+        use Nullability::{Nullable, NonNullable, Unknown};
+        match self {
+            RegularRightSide::EmptyString => Nullable,
+            RegularRightSide::EmptyLanguage => NonNullable,
+            RegularRightSide::NonTerm { A, .. } => assume_nt(A),
+            RegularRightSide::Binding { .. }  => Nullable,
+            RegularRightSide::Constraint(_) => Nullable,
+            RegularRightSide::Blackbox(..) => Unknown,
+
+            RegularRightSide::Term(t) => t.nullable(),
+
+            RegularRightSide::Concat(lhs, rhs) => lhs.nullable(assume_nt).concat(rhs.nullable(assume_nt)),
+            RegularRightSide::Either(lhs, rhs) => lhs.nullable(assume_nt).either(rhs.nullable(assume_nt)),
+
+            RegularRightSide::Kleene(inner) => Nullable,
+        }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Nullability {
+    /// Contains empty string.
+    Nullable,
+    /// Never contains empty string.
+    NonNullable,
+    /// We do not know if it contains empty string or not.
+    Unknown,
+}
+
+impl Nullability {
+    fn non_null(&self) -> bool {
+        *self == Nullability::NonNullable
+    }
+
+    fn concat(&self, other: Self) -> Self {
+        use Nullability::{Nullable, NonNullable, Unknown};
+        match (self, other) {
+            (Nullable, Nullable) => Nullable,
+            (NonNullable, _) => NonNullable,
+            (_, NonNullable) => NonNullable,
+            (Nullable, Unknown) => Unknown,
+            (Unknown, Nullable) => Unknown,
+            (Unknown, Unknown) => Unknown,
+        }
+    }
+
+    fn either(&self, other: Self) -> Self {
+        use Nullability::{Nullable, NonNullable, Unknown};
+        match (self, other) {
+            (Nullable, _) => Nullable,
+            (_, Nullable) => Nullable,
+            (NonNullable, NonNullable) => NonNullable,
+            (Nullable, Unknown) => Unknown,
+            (Unknown, NonNullable) => Unknown,
+            (NonNullable, Unknown) => Unknown,
+            (Unknown, Unknown) => Unknown,
+        }
+    }
+}
+
+impl Term {
+    fn nullable(&self) -> Nullability {
+        match self {
+            Term::C(_) => Nullability::NonNullable,
+            Term::S(s) => if s.len() == 0 {
+                Nullability::Nullable } else {
+                Nullability::NonNullable
+            },
         }
     }
 }
