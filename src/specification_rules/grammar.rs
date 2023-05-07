@@ -1,4 +1,4 @@
-use crate::{expr, Bother, Grammar, RegularRightSide, Rule, Term};
+use crate::{expr, Bother, Grammar, Nullability, RegularRightSide, Rule, Term};
 
 use crate::rendering::Rendered;
 
@@ -185,12 +185,35 @@ impl Grammar {
             // and having some way to save intermediate results,
             // this code is forced to try each partition of the strings,
             // (including empty strings!).
+            //
+            // This hits a well-known problem in parsing: Left Recursion. When
+            // you are trying to parse `E ::= E op E | lit`, and you are doing
+            // it by trying all partitions of the input string, should you try
+            // the empty string for the first E? If you approach this naively,
+            // and say "lets just see if empty string matches", you can run into
+            // an infinite regress issue, where the attempt to check if "" is in
+            // E leads to you trying to check if "" matches E again, as the
+            // first non-terminal in the right-hand side `E op E`.
+            //
+            // As an experiment, we are attempting to filter out this case by
+            // first checking if any of the empty strings are being matched
+            // against a right-hand side that do not contain the empty string
+            // (i.e., that are non-nullable). In the example of `E op E`, this
+            // suffices, because `op` (and thus `op E`) will never match the
+            // empty string, and so we end up able to prove that no partition of
+            // "" can match `E op E`, which avoids the infinite regress.
             RegularRightSide::Concat(r1, r2) => {
                 for i in 0..=w.len() {
                     let wr = w.rendered();
                     let (w1,  w2) = w.split_at(i);
                     println!("{}`{:?}` in Concat(`{}`,`{}`) trial i={} yields {:?} {:?}",
                              indent, wr, r1, r2, i, w1.rendered(), w2.rendered());
+                    // FIXME: we can do better than mapping every non-term to an
+                    // unknown nullability. I.e. via a prepass that successively
+                    // improves an approximation of the nullability map, until
+                    // it hits a fixed-point.
+                    if w1.len() == 0 && r1.nullable(&|nt| Nullability::Unknown).non_null() { continue; }
+                    if w2.len() == 0 && r2.nullable(&|nt| Nullability::Unknown).non_null() { continue; }
                     let (subresults_1, accum) = self.matches_recur(env.clone(), w1, r1, depth+1);
                     let cross = Cross::new(
                         subresults_1,
