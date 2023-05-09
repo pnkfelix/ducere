@@ -212,8 +212,8 @@ impl Grammar {
                     // unknown nullability. I.e. via a prepass that successively
                     // improves an approximation of the nullability map, until
                     // it hits a fixed-point.
-                    if w1.len() == 0 && r1.nullable(&|nt| Nullability::Unknown).non_null() { continue; }
-                    if w2.len() == 0 && r2.nullable(&|nt| Nullability::Unknown).non_null() { continue; }
+                    if w1.len() == 0 && r1.nullable(&|_nt| Nullability::Unknown).non_null() { continue; }
+                    if w2.len() == 0 && r2.nullable(&|_nt| Nullability::Unknown).non_null() { continue; }
                     let (subresults_1, accum) = self.matches_recur(env.clone(), w1, r1, depth+1);
                     let cross = Cross::new(
                         subresults_1,
