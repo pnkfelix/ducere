@@ -311,7 +311,25 @@ fn full_context_free_grammars() {
 
 
 // Example: "Attribute-directed parsing"
+//
+// As adapted from IMAP mail protocol 
+//  literal8 = " ̃{" number ["+"] "}" CRLF *OCTET
+//        ;; A string that might contain NULs.
+//        ;; <number> represents the number of OCTETs
+//        ;; in the response string.
+//
 // literal8 = '~' '{' x:=number ('+' | epsilon) '}' { n := string2int(x) } CRLF ([n > 0] OCTET { n := n - 1 })* [n = 0]
+#[test]
+fn attribute_directed_parsing() {
+    let g = parse_from!(GrammarParser r#"Sdigit ::= '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'; Digit ::= '0' | Sdigit; Number ::= Sdigit Digit*; Octet ::= 'a' | 'b'; Literal8 ::= '~' '{' x := Number ( '+' | '' ) '}'  { n := string2int(x) } '\n' ([n > 0] Octet { n := n - 1 })* [n == 0]"#).unwrap();
+
+    assert!(g.matches(&input("2"), &right_side("Number")).has_parse());
+    assert!(g.matches(&input("2"), &right_side("x := Number")).has_parse());
+    assert!(g.matches(&input("\n"), &right_side("'\n'")).has_parse());
+    assert!(g.matches(&input("\n"), &right_side(r"'\n'")).has_parse());
+    assert!(g.matches(&input("~{2}\nab"), &right_side("Literal8")).has_parse());
+}
+
 
 // Example: "Parmeterized Nonterminals"
 //

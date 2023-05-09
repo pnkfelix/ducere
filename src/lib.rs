@@ -590,7 +590,7 @@ pub struct Binding(expr::Var, expr::Val);
 pub struct BlackBox(String);
 
 impl From<char> for Term { fn from(a: char) -> Self { Self::C(a.into()) } }
-impl From<&str> for Term { fn from(a: &str) -> Self { Self::S(a.into()) } }
+impl From<&str> for Term { fn from(a: &str) -> Self { Self::S(normalize_escapes(a.into()).unwrap()) } }
 impl From<&str> for NonTerm { fn from(a: &str) -> Self { Self(a.into()) } }
 impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
 
