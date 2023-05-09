@@ -122,7 +122,7 @@ pub Concatenant: RegularRightSide = {
 };
 
 pub Var: Var = <s:r"[a-z_][a-zA-Z_0-9]*"> => Var(s.to_string());
-pub NonTerm: NonTerm = <s:r"[A-Z][a-zA-Z_0-9]*"> => NonTerm(format!("{}", s.chars().next().unwrap()));
+pub NonTerm: NonTerm = <s:r"[A-Z][a-zA-Z_0-9]*"> => NonTerm(format!("{}", s.to_string()));
 
 pub Expr: Expr = CmpExpr;
 

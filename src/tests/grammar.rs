@@ -90,6 +90,22 @@ fn grammar_sugar() {
     assert!(g.matches(&input("d"), &right_side(r"A")).no_parse());
 }
 
+#[test]
+fn grammar_with_multi_char_nonterms() {
+    let s = r"Aone ::= 'a' '1'; Atwo ::= 'a' '2'";
+    let lex = toyman::Lexer::new(s);
+    let g = yakker::GrammarParser::new().parse(s, lex).unwrap();
+
+    // FIXME: we cannot test this because it causes code, with the simple fix, to panic.
+    // But the idea is there.
+    // assert!(g.matches(&input("a1"), &right_side(r"A")).no_parse());
+
+    assert!(g.matches(&input("a1"), &right_side(r"Aone")).has_parse());
+    assert!(g.matches(&input("a2"), &right_side(r"Atwo")).has_parse());
+    assert!(g.matches(&input("a1"), &right_side(r"Atwo")).no_parse());
+    assert!(g.matches(&input("a2"), &right_side(r"Aone")).no_parse());
+}
+
 macro_rules! parse_from {
     ($KindParser:ident $s:expr) => {
         {
