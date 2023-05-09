@@ -79,6 +79,34 @@ pub RightSideLeaf: RegularRightSide = {
             RegularRightSide::NonTerm { x: None, A: a, e: None },
     "<" <a:NonTerm> "(" <e:Expr> ")" ">" =>
             RegularRightSide::NonTerm { x: None, A: a, e: Some(e) },
+
+//    // Not ready for this yet
+//
+//    <a:NonTerm> "(" <e:Expr> ")" =>
+//            RegularRightSide::NonTerm { x: None, A: a, e: Some(e) },
+//
+//    // Heres why:
+//    //   /Users/pnkfelix/Dev/Rust/ducere/src/yakker.lalrpop:76:5: 77:64: Local ambiguity detected
+//    //
+//    //    The problem arises after having observed the following symbols in the input:
+//    //      Concatenant NonTerm
+//    //    At that point, if the next token is a `"("`, then the parser can proceed in two different ways.
+//    //
+//    //    First, the parser could execute the production at /Users/pnkfelix/Dev/Rust/ducere/src/yakker.lalrpop:76:5: 77:64, which would consume the top 1 token(s) from the stack and produce a `RightSideLeaf`. This might then yield a parse tree like
+//    //      NonTerm         ╷ Alternative
+//    //      ├─RightSideLeaf─┤           │
+//    //      ├─Concatenant───┘           │
+//    //      └─Alternative───────────────┘
+//    //
+//    //    Alternatively, the parser could shift the `"("` token and later use it to construct a `RightSideLeaf`. This might then yield a parse tree like
+//    //      Concatenant NonTerm "(" Expr ")"
+//    //      │           ├─RightSideLeaf────┤
+//    //      │           ├─Concatenant──────┤
+//    //      │           └─Alternative──────┤
+//    //      └─Alternative──────────────────┘
+//    //
+//    //    See the LALRPOP manual for advice on making your grammar LR(1).
+
     "<" <x:Var> ":=" <a:NonTerm> "(" <e:Expr> ")" ">" =>
             RegularRightSide::NonTerm { x: Some(x), A: a, e: Some(e) },
     <x:Var> ":=" <a:NonTerm> =>
