@@ -307,6 +307,9 @@ pub mod expr {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub enum BinOp { Add, Sub, Mul, Div, Gt, Ge, Lt, Le, Eql, Neq }
 
+    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+    pub enum UnOp { String2Int }
+
     #[derive(PartialEq, Eq, Hash, Clone, Debug)]
     pub struct Var(pub String);
 
@@ -314,7 +317,7 @@ pub mod expr {
     pub fn y_0() -> Var { Var("Y_0".into()) }
 
     #[derive(PartialEq, Eq, Clone, Debug)]
-    pub enum Expr { Var(Var), Lit(Val), BinOp(BinOp, Box<Expr>, Box<Expr>) }
+    pub enum Expr { Var(Var), Lit(Val), BinOp(BinOp, Box<Expr>, Box<Expr>), UnOp(UnOp, Box<Expr>) }
 
     #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
     pub enum Val { Bool(bool), Unit, String(String), Int(i64), }
@@ -409,11 +412,25 @@ pub mod expr {
         }
     }
 
+    // FIXME: eval should return a Result<Val, EvalError>, or something. We
+    // cannot make strong assumptions about what inputs it might be called on.
     impl Expr {
         pub fn eval(&self, env: &Env, ctxt: &dyn std::fmt::Debug) -> Val {
             match self {
                 Expr::Var(x) => env.lookup(x).unwrap_or_else(|| panic!("failed lookup: {:?} in {:?}", x, ctxt)).clone(),
                 Expr::Lit(v) => v.clone(),
+                Expr::UnOp(op, e) => {
+                    let arg = e.eval(env, ctxt);
+                    match op {
+                        UnOp::String2Int => {
+                            if let Val::String(s) = arg {
+                                Val::Int(s.parse().unwrap())
+                            } else {
+                                panic!("found non-string: {} as input to string2int", arg);
+                            }
+                        }
+                    }
+                }
                 Expr::BinOp(op, e1, e2) => {
                     let lhs = e1.eval(env, ctxt);
                     let rhs = e2.eval(env, ctxt);

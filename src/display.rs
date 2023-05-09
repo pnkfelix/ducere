@@ -77,7 +77,15 @@ impl std::fmt::Display for RegularRightSide {
 }
 
 mod expr_display {
-    use crate::expr::{BinOp, Env, Expr, Val, Var};
+    use crate::expr::{BinOp, UnOp, Env, Expr, Val, Var};
+    impl std::fmt::Display for UnOp {
+        fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(w, "{}", match *self {
+                UnOp::String2Int => "string2int",
+            })
+        }
+    }
+
     impl std::fmt::Display for BinOp {
         fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(w, "{}", match *self {
@@ -113,6 +121,7 @@ mod expr_display {
                 (Expr::Lit(_), _) => false,
 
                 (Expr::BinOp(inner_op, _lhs, _rhs), outer_op) => inner_op != &outer_op,
+                (Expr::UnOp(inner_op, _arg), _outer_op) => true,
             }
         }
     }
@@ -122,6 +131,10 @@ mod expr_display {
            match self {
                 Expr::Var(Var(v)) => write!(w, "{}", v),
                 Expr::Lit(val) => write!(w, "{}", val),
+
+                Expr::UnOp(op, arg) => {
+                    write!(w, "{}({})", op, arg)
+                }
 
                 Expr::BinOp(op, lhs, rhs) => {
                     match (lhs.needs_parens(*op), rhs.needs_parens(*op)) {
