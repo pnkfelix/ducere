@@ -38,6 +38,12 @@ fn regular_right_sides_expression_dsl() {
 }
 
 #[test]
+fn regular_right_sides_expression_dsl_as_non_term_actual_arg() {
+    let s = r#"<StringFW(3)>"#; let lex = toyman::Lexer::new(s); yakker::RegularRightSideParser::new().parse(s, lex).unwrap();
+    let s = r#"<StringFW(n - 1)>"#; let lex = toyman::Lexer::new(s); yakker::RegularRightSideParser::new().parse(s, lex).unwrap();
+}
+
+#[test]
 fn non_empty_grammar() {
     let s = r"A::='c'";
     let lex = toyman::Lexer::new(s);
@@ -334,8 +340,39 @@ fn attribute_directed_parsing() {
 // Example: "Parmeterized Nonterminals"
 //
 // stringFW(n) = ([n > 0] CHAR8 { n := n-1 })* [n = 0]
-//
+#[test]
+fn parameterized_non_terms_1() {
+    let g = parse_from!(GrammarParser r#"StringFW(n) ::= ([n > 0] CHAR8 { n := n-1 })* [n == 0]; CHAR8 ::= 'a' | 'b' | 'c';"#).unwrap();
+    // Note; we currently have to use `<NonTerm(arg_expr)>`, with explicit angle-brackets, for these
+    // applications of parameterized non-terminals. The "obvious" way to fix the yakker.lalrpop
+    // definition leads to a complaint that the resulting grammar is not LR(1) anymore, probably
+    // because of the ambiguity in precedence with alternative construction, plus the fact that
+    // non-terminals are allowed to occur on their own entirely.
+
+
+    assert!(g.matches(&input("abc"), &right_side("<StringFW(3)>")).has_parse());
+    assert!(g.matches(&input("abc"), &right_side("<StringFW(4)>")).no_parse());
+    assert!(g.matches(&input("abca"), &right_side("<StringFW(4)>")).has_parse());
+    assert!(g.matches(&input(""), &right_side("<StringFW(0)>")).has_parse());
+}
+
 // stringFW(n) = [n = 0] | [n > 0] CHAR8 stringFW(n - 1)
+#[test]
+fn parameterized_non_terms_2() {
+    // Note; we currently have to use `<NonTerm(arg_expr)>`, with explicit angle-brackets, for these
+    // applications of parameterized non-terminals. The "obvious" way to fix the yakker.lalrpop
+    // definition leads to a complaint that the resulting grammar is not LR(1) anymore, probably
+    // because of the ambiguity in precedence with alternative construction, plus the fact that
+    // non-terminals are allowed to occur on their own entirely.
+
+    let g = parse_from!(GrammarParser r#"StringFW(n) ::= [n == 0] | [n > 0] CHAR8 <StringFW(n - 1)>; CHAR8 ::= 'a' | 'b' | 'c';"#).unwrap();
+
+    assert!(g.matches(&input("abc"), &right_side("<StringFW(3)>")).has_parse());
+    assert!(g.matches(&input("abc"), &right_side("<StringFW(4)>")).no_parse());
+    assert!(g.matches(&input("abca"), &right_side("<StringFW(4)>")).has_parse());
+    assert!(g.matches(&input(""), &right_side("<StringFW(0)>")).has_parse());
+}
+
 //
 //    decls(s) = 'typedef' type-expr x := identifier decls(insert(s.types,x))
 //             | ...
