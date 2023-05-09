@@ -121,7 +121,7 @@ mod expr_display {
                 (Expr::Lit(_), _) => false,
 
                 (Expr::BinOp(inner_op, _lhs, _rhs), outer_op) => inner_op != &outer_op,
-                (Expr::UnOp(inner_op, _arg), _outer_op) => true,
+                (Expr::UnOp(_inner_op, _arg), _outer_op) => true,
             }
         }
     }

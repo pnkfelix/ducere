@@ -174,6 +174,7 @@ pub fn finality(earley: &Earley, s: State) -> Finality {
 impl EarleyConfig {
     fn finality(&self, s: State) -> Finality { finality(&self.earley, s) }
 
+    #[allow(dead_code)]
     pub fn new(earley: Earley) -> Self {
         // ----------------------------------------------- ET-Init
         //  \epsilon \in tree(0, 0, q_0, [y_0 := ()], q_0)
@@ -456,7 +457,7 @@ impl EarleyConfig {
         let mut changed = Changed::Unchanged;
 
         for i in 0..=j {
-            let tree_i_j = self.trees.map((i, j));
+            let _tree_i_j = self.trees.map((i, j));
             let mut to_add = Vec::new();
 
             for k in i..=j {
