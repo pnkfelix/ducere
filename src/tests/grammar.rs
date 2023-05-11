@@ -374,6 +374,12 @@ fn parameterized_non_terms_2() {
     assert!(g.matches(&input("a"), &right_side("<StringFW(0)>")).has_parse());
 }
 
+#[test]
+fn flexible_quote_delims() {
+    let g = parse_from!(GrammarParser r##"TripleA ::= r#'abc'#;"##).unwrap();
+    assert!(g.matches(&input("abc"), &right_side("TripleA")).has_parse());
+}
+
 //
 //    decls(s) = 'typedef' type-expr x := identifier decls(insert(s.types,x))
 //             | ...
