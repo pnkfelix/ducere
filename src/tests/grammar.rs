@@ -371,6 +371,7 @@ fn parameterized_non_terms_2() {
     assert!(g.matches(&input("abc"), &right_side("<StringFW(4)>")).no_parse());
     assert!(g.matches(&input("abca"), &right_side("<StringFW(4)>")).has_parse());
     assert!(g.matches(&input(""), &right_side("<StringFW(0)>")).has_parse());
+    assert!(g.matches(&input("a"), &right_side("<StringFW(0)>")).has_parse());
 }
 
 //
