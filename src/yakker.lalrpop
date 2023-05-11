@@ -32,7 +32,14 @@ extern {
         r"[a-z_][a-zA-Z_0-9]*" => Tok::LowerIdent(<&'a str>),
         r"[A-Z][a-zA-Z_0-9]*" => Tok::UpperIdent(<&'a str>),
         r"[1-9][0-9]*|0" => Tok::Numeric(<&'a str>),
-        STRING_LIT => Tok::QuoteLit('"', <&'a str>, '"'),
+        DOUBLE_LIT => Tok::QuoteLit('"', <&'a str>, '"'),
+        SINGLE_LIT => Tok::QuoteLit('\'', <&'a str>, '\''),
+        BACK_LIT => Tok::QuoteLit('`', <&'a str>, '`'),
+	SQUARE_LIT => Tok::QuoteLit('[', <&'a str>, ']'),
+	PAREN_LIT => Tok::QuoteLit('(', <&'a str>, ')'),
+	CURLY_LIT => Tok::QuoteLit('{', <&'a str>, '}'),
+	ANGLE_LIT => Tok::QuoteLit('<', <&'a str>, '>'),
+        PIPE_LIT => Tok::QuoteLit('|', <&'a str>, '|'),
         r#"''"# => Tok::QuoteLit('\'', "", '\''),
         r"'[^'\\]'" => Tok::QuoteLit('\'', <&'a str>, '\''),
         ";" => Tok::Commalike(";"),
@@ -192,7 +199,7 @@ pub MulArg: Expr = {
     <n:r"[1-9][0-9]*|0"> => Expr::Lit(n.parse::<i64>().unwrap().into()),
     "(" ")"    => ().into(),
     "(" <e:Expr> ")"    => e,
-    <s:STRING_LIT> =>?
+    <s:DOUBLE_LIT> =>?
         normalize_escapes(&s[0..s.len()])
             .map(|s|s.into())
             .map_err(|e| ParseError::User { error: e }),
