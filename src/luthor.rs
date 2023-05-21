@@ -359,7 +359,7 @@ impl<'input> Lexer<'input> {
                     sharp_count: None,
                     delim: Delims(ic.1, c),
                     content: (),
-                }), nbg!(&self.input[spanned_start..=ic.0]));
+                }), nbg!(&self.input[(spanned_start+1)..=(ic.0-1)]));
                 return Some(Ok(nbg!((spanned_start, tok, ic.0))));
             }
         }

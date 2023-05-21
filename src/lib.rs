@@ -36,7 +36,7 @@ mod toyman {
             loop {
                 let x = if let Some(x) = nbg!(self.0.next()) { x } else { return None; };
                 let (i, x, j) = match x { Ok(x) => nbg!(x), Err(e) => { return Some(Err(YakkerError::Lex(e))); } };
-                let c = nbg!(x.data()).chars().next().unwrap();
+                let opt_c = nbg!(x.data()).chars().next();
                 let tok = match (*x.data(), x.kind()) {
                     (s, K::Bracket) => {
                         Tok::Bracket(s)
@@ -57,7 +57,7 @@ mod toyman {
                     }
 
                     (s, K::Quote(Quoted { sharp_count: _, delim: Delims(c1, c2), content: _ })) => {
-                        nbg!(Tok::QuoteLit(*c1, &s[1..(s.len()-1)], *c2))
+                        nbg!(Tok::QuoteLit(*c1, s, *c2))
                     }
 
                     (_, K::Space) => {
@@ -69,6 +69,7 @@ mod toyman {
                         nbg!(Tok::UpperIdent(s))
                     }
                     (s, K::Word(Word::Id(_))) => {
+			let c = opt_c.unwrap();
                         assert!(c == '_' || c.is_lowercase());
                         Tok::LowerIdent(s)
                     }
