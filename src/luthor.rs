@@ -25,7 +25,12 @@
 //! Aside: Many languages would break operators apart based on fine-grained
 //! rules; and some languages like FORTH and Lisp/Scheme would allow identifiers
 //! to have operator characters embedded within them. Luthor takes a middle
-//! ground that is optimized for allowing a rich collection of operators
+//! ground that is optimized for allowing a rich collection of operators.
+//!
+//! Also, it is a deliberate design choice that bracketted content is mapped
+//! to a quoted form; this enables the use of e.g. `r#{ ... }#` to contain
+//! source code from essentially any language (and one just uses the right
+//! number of #'s to ensure the delimiters contain it).
 
 use std::iter::Peekable;
 use std::str::CharIndices;
@@ -35,13 +40,13 @@ use derive_more::{AsRef};
 use unicode_brackets::UnicodeBrackets;
 
 #[derive(Clone, PartialEq, Eq, Debug, AsRef)]
-pub struct Ident<S>(S);
+pub struct Ident<S>(pub(crate) S);
 #[derive(Clone, PartialEq, Eq, Debug, AsRef)]
-pub struct Numeric<S>(S);
+pub struct Numeric<S>(pub(crate) S);
 #[derive(Clone, PartialEq, Eq, Debug, AsRef)]
-pub struct Operative<S>(S);
+pub struct Operative<S>(pub(crate) S);
 #[derive(Clone, PartialEq, Eq, Debug, AsRef)]
-pub struct Commalike<S>(S);
+pub struct Commalike<S>(pub(crate) S);
 
 impl AsRef<str> for Ident<String> { fn as_ref(&self) -> &str { self.0.as_ref() } }
 
