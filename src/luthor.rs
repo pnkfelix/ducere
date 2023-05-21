@@ -126,7 +126,7 @@ pub struct Delims(pub char, pub char);
 #[derive(Clone, PartialEq, Eq, Debug, AsRef)]
 pub struct Quoted<S> {
     // If None, then this is not a raw-string
-    // If Some, then holds the number of sharps between the 'r' and the oepn delimiter.
+    // If Some, then holds the number of sharps between the 'r' and the open delimiter.
     // FIXME: it looks like the code isn't exercising the None case anywhere.
     pub sharp_count: Option<usize>,
     pub delim: Delims,
