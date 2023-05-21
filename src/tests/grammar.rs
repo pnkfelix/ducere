@@ -376,8 +376,8 @@ fn parameterized_non_terms_2() {
 
 #[test]
 fn flexible_quote_delims() {
-    let g = parse_from!(GrammarParser r##"TripleA ::= r#'aaa'#;"##).unwrap();
-    assert!(g.matches(&input("aaa"), &right_side("TripleA")).has_parse());
+    let g = parse_from!(GrammarParser r##"TripleA ::= r#'abc'#;"##).unwrap();
+    assert!(g.matches(&input("abc"), &right_side("TripleA")).has_parse());
 }
 
 //
