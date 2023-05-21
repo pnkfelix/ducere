@@ -12,6 +12,14 @@ fn strings<'a>(v: &'a [&str]) -> impl Iterator<Item=String> + 'a {
     v.iter().map(|s|s.to_string())
 }
 
+fn toks_iter(s: &str) -> impl Iterator<Item=Result<luthor::Tok<String>, luthor::LexicalError>> + '_ {
+    luthor::Lexer::new(s).map(|res| res.map(|t| luthor::Tok(t.1.0, t.1.1.to_string())))
+}
+
+fn toks(s: &str) -> Result<Vec<luthor::Tok<String>>, luthor::LexicalError> {
+    toks_iter(s).collect()
+}
+
 macro_rules! assert_strings_eq {
     ($lft:expr, $rgt:expr) => {
         // assert!($lft.eq($rgt))
@@ -60,4 +68,35 @@ fn lexing_quotations() {
                                .into_iter().collect::<String>()),
                        strings(&["a", " ", "A(B)", "C[D]", "[E](F)", "{G}'H'",
                                  "I\"J\"", "KL", "MN", "OP", " ", "c"]));
+}
+
+#[test]
+fn quotation_quibbles() -> Result<(), luthor::LexicalError> {
+    use crate::luthor::{Tok, TokKind::{Bracket, Quote, Space, Word}, Quoted, Delims, Word::{Id}, Ident};
+    fn raw_bracketed(s: &str) -> Tok<String> {
+	// FIXME: infer the sharp_count based on the given content `s`
+	// (which isn't 100% expressive but *is* convenient and will
+	// serve well enough for these tests).
+	Tok(Quote(Quoted { sharp_count: Some(0), delim: Delims('[', ']'), content: () }), s.to_string())
+    }
+    fn bracket(c: char) -> Tok<String> {
+	Tok(Bracket, c.into())
+    }
+    fn ident(s: &str) -> Tok<String> {
+	Tok(Word(Id(Ident(()))), s.to_string())
+    }
+    fn space(s: &str) -> Tok<String> {
+	Tok(Space, s.to_string())
+    }
+
+    assert_eq!(toks("[]")?,
+	       vec![bracket('['), bracket(']')]);
+    assert_eq!(toks("r[]")?,
+	       vec![raw_bracketed("")]);
+    assert_eq!(toks("[a b]")?,
+	       vec![bracket('['), ident("a"), space(" "), ident("b"), bracket(']')]);
+    assert_eq!(toks("r[a b]")?,
+	       vec![raw_bracketed("a b")]);
+    
+    Ok(())
 }
