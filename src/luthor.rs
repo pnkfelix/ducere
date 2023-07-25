@@ -31,6 +31,15 @@
 //! to a quoted form; this enables the use of e.g. `r#{ ... }#` to contain
 //! source code from essentially any language (and one just uses the right
 //! number of #'s to ensure the delimiters contain it).
+//!
+//! It is also a deliberate design choice that we have different *kinds* of
+//! brackets; this is to allow easy dispatch based on the kind of bracket
+//! provided. For example, the Yakker paper uses (( `[` <expr> `]` )) for
+//! constraints and (( `{` [ <var> := ] <expr> `}` )) for (side-effecting)
+//! binding expressions; since these interact with the surrounding grammar in
+//! different ways, it is convenient to treat them as distinct forms, but it is
+//! also convenient as a grammar author to keep them as succinct as they are in
+//! Yakker itself.
 
 use std::iter::Peekable;
 use std::str::CharIndices;
