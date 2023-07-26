@@ -110,8 +110,12 @@ pub enum AbstractNode<X> {
 // const NONTERM_BRACKETS: (char, char) = ('⟨', '⟩');
 const NONTERM_BRACKETS: (char, char) = ('(', ')');
 
-impl<X: std::fmt::Debug> std::fmt::Debug for AbstractNode<X> {
-    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<X> AbstractNode<X> {
+    fn fmt_map(
+        &self,
+        w: &mut std::fmt::Formatter,
+        f: impl Fn(&X, &mut std::fmt::Formatter) -> std::fmt::Result) -> std::fmt::Result
+    {
         match self {
             AbstractNode::Term(t) => { write!(w, "\"{}\"", t.string() ) }
             AbstractNode::Binding(b) => { write!(w, "{{{}:={}}}", (b.0).0, b.1) }
@@ -120,24 +124,41 @@ impl<X: std::fmt::Debug> std::fmt::Debug for AbstractNode<X> {
                 let bd = NONTERM_BRACKETS;
                 match (&p.var, &p.input) {
                     (None, expr::Val::Unit) => {
-                        write!(w, "{NT}{b}{LOAD:?}{d}",
-                               b=bd.0, d=bd.1, NT=p.nonterm.0, LOAD=p.payload)
+                        write!(w, "{NT}{b}", NT=p.nonterm.0, b=bd.0)?;
+                        f(&p.payload, w)?;
+                        write!(w, "{d}", d=bd.1)
                     }
                     (None, input) => {
-                        write!(w, "{NT}({IN}){b}{LOAD:?}{d}",
-                               b=bd.0, d=bd.1, NT=p.nonterm.0, IN=input, LOAD=p.payload)
+                        write!(w, "{NT}({IN}){b}", b=bd.0, NT=p.nonterm.0, IN=input)?;
+                        f(&p.payload, w)?;
+                        write!(w, "{d}", d=bd.1)
                     }
                     (Some(var), expr::Val::Unit) => {
-                        write!(w, "{VAR}:{NT}{b}{LOAD:?}{d}",
-                               b=bd.0, d=bd.1, VAR=var.0, NT=p.nonterm.0, LOAD=p.payload)
+                        write!(w, "{VAR}:{NT}{b}", b=bd.0, VAR=var.0, NT=p.nonterm.0)?;
+                        f(&p.payload, w)?;
+                        write!(w, "{d}", d=bd.1)
                     }
                     (Some(var), input) => {
-                        write!(w, "{VAR}:{NT}({IN}){b}{LOAD:?}{d}",
-                               b=bd.0, d=bd.1, VAR=var.0, NT=p.nonterm.0, IN=input, LOAD=p.payload)
+                        write!(w, "{VAR}:{NT}({IN}){b}",
+                               b=bd.0, VAR=var.0, NT=p.nonterm.0, IN=input)?;
+                        f(&p.payload, w)?;
+                        write!(w, "{d}", d=bd.1)
                     }
                 }
             }
         }
+    }
+}
+
+impl<X: std::fmt::Debug> std::fmt::Debug for AbstractNode<X> {
+    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.fmt_map(w, |load, w| write!(w, "{:?}", load))
+    }
+}
+
+impl<X: std::fmt::Display> std::fmt::Display for AbstractNode<X> {
+    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.fmt_map(w, |load, w| write!(w, "{}", load))
     }
 }
 
