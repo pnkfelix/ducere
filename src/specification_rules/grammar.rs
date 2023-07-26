@@ -48,8 +48,7 @@ impl<I, ToJ, J> Iterator for Cross<I, ToJ, J> where
     }
 }
 
-
-impl Grammar {
+pub(crate) trait GrammarInterpreter {
     // This implements the relation
     // env ⊢ w ∈ r ⇒ Env
     //
@@ -68,10 +67,16 @@ impl Grammar {
     //       multiple potential matches. One issue is constraints [PRED]: if you
     //       can get distinct environments out, you need to find the ones that will
     //       satisfy PRED.
-    pub fn matches<'s>(&'s self, w: &'s [Term], r: &'s RegularRightSide) -> Box<dyn Iterator<Item=expr::Env> + 's> {
+    fn matches<'s>(&'s self, w: &'s [Term], r: &'s RegularRightSide) -> Box<dyn Iterator<Item=expr::Env> + 's>;
+}
+
+impl GrammarInterpreter for Grammar {
+    fn matches<'s>(&'s self, w: &'s [Term], r: &'s RegularRightSide) -> Box<dyn Iterator<Item=expr::Env> + 's> {
         self.matches_recur(expr::Env::empty(), w, r, 0).0
     }
+}
 
+impl Grammar {
     fn split_matches<'s, 'a>(&'s self, mut splits: impl Clone + Iterator<Item=usize> + 's, env: expr::Env, w: &'s [Term], mut rs: impl Clone + Iterator<Item=&'s RegularRightSide> + 's, depth: usize) -> (Box<dyn Iterator<Item=expr::Env> + 's>, usize) {
         let (split, r) = match (splits.next(), rs.next()) {
             (Some(split), Some(r)) => (split, r),

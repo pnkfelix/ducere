@@ -1,5 +1,6 @@
 use crate::*;
 use super::*;
+use crate::specification_rules::grammar::GrammarInterpreter;
 
 pub(crate) fn right_side(s: &str) -> RegularRightSide {
     let lex = toyman::Lexer::new(s);
