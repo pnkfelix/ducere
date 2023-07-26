@@ -9,6 +9,8 @@ use crate::transducer::tests_for_transducer::{fig_2_a, fig_2_b, fig_2_c};
 use crate::Term;
 use crate::{AbstractNode, Tree};
 
+use expect_test::expect;
+
 trait Fmap<X, Y> {
     type Out;
     fn fmap(&self, f: &impl Fn(&X) -> Y) -> Self::Out;
@@ -59,6 +61,20 @@ impl<X,Y> Fmap<X,Y> for Option<X> {
     }
 }
 
+macro_rules! assert_formatted {
+    ($fmt:literal, $actual:expr, $expect:expr) => {
+        {
+            let actual = format!($fmt, $actual);
+            $expect.assert_eq(&actual)
+        }
+    }
+}
+
+macro_rules! assert_dbg_eq {
+    ($actual:expr, $expect:expr) => {
+        assert_formatted!("{:?}", $actual, $expect)
+    }
+}
 
 #[test]
 fn imperative_fixed_width_integer() {
@@ -68,12 +84,9 @@ fn imperative_fixed_width_integer() {
     config.step(Term::C('1'));
     dbg!(config.dyn_state());
 
-    assert_eq!(
-        format!("{:?}",
-                config
-                .accepting(0,1)
-        ),
-        r#"Some([Tree(["1", {n:=0}])])"#);
+    assert_dbg_eq!(
+        config.accepting(0,1),
+        expect![[r#"Some([Tree(["1", {n:=0}])])"#]]);
 }
 
 #[test]
@@ -85,22 +98,18 @@ fn functional_fixed_width_integer() {
     let mut config = make_config("n".into(), 1.into());
     config.step(Term::C('1'));
 
-    assert_eq!(
-        format!("{:?}",
-                config
-                .accepting(0,1)
-        ),
-        r#"Some([Tree([dig(Tree(["1"])), int(0)(Tree([]))])])"#
+    assert_formatted!(
+        "{:?}",
+        config.accepting(0,1),
+        expect![[r#"Some([Tree([dig(Tree(["1"])), int(0)(Tree([]))])])"#]]
     );
 
     let mut config = make_config("n".into(), 2.into());
     config.step(Term::C('9'));
     config.step(Term::C('8'));
-    assert_eq!(
-        format!("{:?}",
-                config
-                .accepting(0,2)
-        ),
-        r#"Some([Tree([dig(Tree(["9"])), int(1)(Tree([dig(Tree(["8"])), int(0)(Tree([]))]))])])"#
+    assert_formatted!(
+        "{:?}",
+        config.accepting(0,2),
+        expect![[r#"Some([Tree([dig(Tree(["9"])), int(1)(Tree([dig(Tree(["8"])), int(0)(Tree([]))]))])])"#]]
     );
 }
