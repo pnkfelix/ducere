@@ -1,5 +1,7 @@
 use std::collections::{HashMap};
-use crate::{Blackbox, NonTerm, Term};
+
+use crate::{NonTerm, Term};
+use crate::blackbox::Blackbox;
 use crate::expr::{Expr, Var}/*}*/;  // check out the (bad) error you get with that uncommented.
 
 #[derive(Clone, Debug)]

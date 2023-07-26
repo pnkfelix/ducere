@@ -1,6 +1,9 @@
-use crate::{expr, Bother, Grammar, Nullability, RegularRightSide, Rule, Term};
+use crate::{expr, Grammar, RegularRightSide, Rule, Term};
+use crate::grammar::Nullability;
 
 use crate::rendering::Rendered;
+
+use crate::util::Bother;
 
 struct Cross<I: Iterator, ToJ, J> where I: Iterator,
 {

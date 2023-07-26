@@ -1,7 +1,5 @@
  #[macro_use] extern crate lalrpop_util;
 
-use std::collections::HashSet;
-
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
 mod luthor;
@@ -17,184 +15,17 @@ macro_rules! nbg {
 
 mod toyman;
 
-pub trait Recognizer {
-    type Term;
-    type String;
-    fn accept(&self, iter: &mut dyn Iterator<Item=&Self::Term>) -> Option<Self::String>;
-}
+mod grammar;
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct Blackbox {
-    name: String,
-    from_val: fn(expr::Val) -> Box<dyn Recognizer<Term=Term, String=String>>,
-}
+use grammar::{Grammar, Rule, RegularRightSide, Term, NonTerm, Binding};
 
-impl std::fmt::Debug for Blackbox {
-    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(w, "blackbox[{}]", self.name)
-    }
-}
+mod blackbox;
 
-#[derive(PartialEq, Eq, Debug)]
-pub struct Grammar { pub rules: Vec<Rule> }
-
-impl Grammar {
-    pub fn nonterms(&self) -> HashSet<NonTerm> {
-        // one might argue that this should also scan the right-hand sides of
-        // the rules for non-terminals that are otherwise undefined. But I say
-        // that grmmars that do that deserve to be considered ill-formed.
-        self.rules.iter().map(|r|r.lhs.clone()).collect()
-    }
-    pub fn terms(&self) -> HashSet<Term> {
-        self.rules.iter().flat_map(|r|r.rhs.terms()).collect()
-    }
-}
-
-impl Grammar {
-    pub fn empty() -> Self { Grammar { rules: vec![] } }
-
-    fn rule(&self, nonterm: &NonTerm) -> Option<&Rule> {
-        self.rules.iter().find(|r| &r.lhs == nonterm)
-    }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub struct Rule {
-    label: String,
-    lhs: NonTerm,
-    param: Option<expr::Var>,
-    rhs: RegularRightSide
-}
-
-impl Rule {
-    #[cfg(test)]
-    pub fn new(lhs: NonTerm, param: Option<expr::Var>, rhs: RegularRightSide) -> Rule {
-        Rule { label: String::new(), lhs, param, rhs }
-    }
-
-    #[cfg(test)]
-    fn labelled_new(label: impl Into<String>, lhs: NonTerm, param: Option<expr::Var>, rhs: RegularRightSide) -> Rule {
-        Rule { label: label.into(), lhs, param, rhs }
-    }
-}
-
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub enum RegularRightSide {
-    EmptyString,
-    EmptyLanguage,
-    Term(Term),
-    #[allow(non_snake_case)]
-    NonTerm { x: Option<expr::Var>, A: NonTerm, e: Option<expr::Expr> },
-    Binding { x: expr::Var, e: expr::Expr },
-    Concat(Box<Self>, Box<Self>),
-    Either(Box<Self>, Box<Self>),
-    Kleene(Box<Self>),
-    Constraint(expr::Expr),
-    Blackbox(Blackbox, expr::Expr),
-}
-
-trait Bother<'a, T> { fn b_iter(self) -> Box<dyn Iterator<Item=T> + 'a>; }
-
-impl<'a, T:'a> Bother<'a, T> for Option<T> {
-    fn b_iter(self) -> Box<dyn Iterator<Item=T>+'a> {
-        Box::new(self.into_iter())
-    }
-}
-
-impl RegularRightSide {
-    fn terms(&self) -> Box<dyn Iterator<Item=Term>> {
-        match self {
-            RegularRightSide::EmptyString |
-            RegularRightSide::EmptyLanguage |
-            RegularRightSide::NonTerm { .. } |
-            RegularRightSide::Binding { .. }  |
-            RegularRightSide::Constraint(_) |
-            RegularRightSide::Blackbox(..) => None.b_iter(),
-
-            RegularRightSide::Term(t) => Some(t.clone()).b_iter(),
-
-            RegularRightSide::Concat(lhs, rhs) |
-            RegularRightSide::Either(lhs, rhs) => Box::new(lhs.terms().chain(rhs.terms())),
-
-            RegularRightSide::Kleene(inner) => inner.terms(),
-        }
-    }
-
-    fn nullable(&self, assume_nt: &impl Fn(&NonTerm) -> Nullability) -> Nullability {
-        use Nullability::{Nullable, NonNullable, Unknown};
-        match self {
-            RegularRightSide::EmptyString => Nullable,
-            RegularRightSide::EmptyLanguage => NonNullable,
-            RegularRightSide::NonTerm { A, .. } => assume_nt(A),
-            RegularRightSide::Binding { .. }  => Nullable,
-            RegularRightSide::Constraint(_) => Nullable,
-            RegularRightSide::Blackbox(..) => Unknown,
-
-            RegularRightSide::Term(t) => t.nullable(),
-
-            RegularRightSide::Concat(lhs, rhs) => lhs.nullable(assume_nt).concat(rhs.nullable(assume_nt)),
-            RegularRightSide::Either(lhs, rhs) => lhs.nullable(assume_nt).either(rhs.nullable(assume_nt)),
-
-            RegularRightSide::Kleene(_inner) => Nullable,
-        }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-enum Nullability {
-    /// Contains empty string.
-    Nullable,
-    /// Never contains empty string.
-    NonNullable,
-    /// We do not know if it contains empty string or not.
-    Unknown,
-}
-
-impl Nullability {
-    fn non_null(&self) -> bool {
-        *self == Nullability::NonNullable
-    }
-
-    fn concat(&self, other: Self) -> Self {
-        use Nullability::{Nullable, NonNullable, Unknown};
-        match (self, other) {
-            (Nullable, Nullable) => Nullable,
-            (NonNullable, _) => NonNullable,
-            (_, NonNullable) => NonNullable,
-            (Nullable, Unknown) => Unknown,
-            (Unknown, Nullable) => Unknown,
-            (Unknown, Unknown) => Unknown,
-        }
-    }
-
-    fn either(&self, other: Self) -> Self {
-        use Nullability::{Nullable, NonNullable, Unknown};
-        match (self, other) {
-            (Nullable, _) => Nullable,
-            (_, Nullable) => Nullable,
-            (NonNullable, NonNullable) => NonNullable,
-            (Unknown, NonNullable) => Unknown,
-            (NonNullable, Unknown) => Unknown,
-            (Unknown, Unknown) => Unknown,
-        }
-    }
-}
-
-impl Term {
-    fn nullable(&self) -> Nullability {
-        match self {
-            Term::C(_) => Nullability::NonNullable,
-            Term::S(s) => if s.len() == 0 {
-                Nullability::Nullable } else {
-                Nullability::NonNullable
-            },
-        }
-    }
-}
+use blackbox::{BlackboxName};
 
 mod display;
 mod rendering;
-
+mod util;
 
 trait ParseMatches {
     fn has_parse(&mut self) -> bool;
@@ -240,53 +71,6 @@ fn normalize_escapes(input: &str) -> Result<String, YakkerError> {
     return Ok(s);
 }
 
-// A grammar G is a tuple (Sigma, Delta, Phi, A_0, R), where
-//   Sigma is a finite set of terminals
-//   Delta is a finite set of non-terminals
-//   Phi si a finite set of blackboxes
-//   A_0 in Delta is the start non-terminal, and
-//   R maps non-termainsl to regular right sides
-
-// Regular right sides
-//
-// r ::= epsilon           <empty string>
-//    |  empty             <empty language>
-//    |  c                 <terminal>
-//    |  x := A(e)         <nonterminal>
-//    |  x := e            <binding>
-//    |  (r r)             <concatenation>
-//    |  (r | r)           <alternation>
-//    |  (r*)              <Kleene closure>
-//    |  [e]               <constraint>
-//    |  phi(e)            <blackbox>
-//
-
-#[derive(PartialEq, Eq, Clone, Hash, Debug)]
-pub enum Term { C(char), S(String) }
-
-impl Term {
-    fn string(&self) -> String {
-        let mut s = String::new();
-        match self {
-            Term::C(c) => { s.push(*c) }
-            Term::S(s2) => { s = s2.clone(); }
-        }
-        s
-    }
-    fn matches(&self, w: &[Term]) -> bool {
-        if let (&Term::C(c1), &[Term::C(c2)]) = (self, w) {
-            return c1 == c2;
-        }
-        let left = self.string();
-        let left = left.chars().fuse();
-        let right: Vec<String> = w.iter().map(|t|t.string()).collect();
-        let right = right.iter().map(|s|s.chars()).flatten();
-        left.eq(right)
-    }
-}
-
-#[derive(PartialEq, Eq, Clone, Hash, Debug)]
-pub struct NonTerm(String);
 // #[derive(PartialEq, Eq, Clone, Debug)]
 // pub struct Var(String);
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -302,14 +86,6 @@ impl From<crate::expr::Val> for Val {
         }
     }
 }
-
-// notation from paper: `{x := v }`
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct Binding(expr::Var, expr::Val);
-
-// notation from paper: `< w >`
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct BlackBox(String);
 
 impl From<char> for Term { fn from(a: char) -> Self { Self::C(a.into()) } }
 impl From<&str> for Term { fn from(a: &str) -> Self { Self::S(normalize_escapes(a.into()).unwrap()) } }
@@ -327,7 +103,7 @@ pub struct Parsed<X> { var: Option<expr::Var>, nonterm: NonTerm, input: expr::Va
 pub enum AbstractNode<X> {
     Term(Term),
     Binding(Binding),
-    BlackBox(BlackBox),
+    BlackBox(BlackboxName),
     Parse(Parsed<X>),
 }
 
