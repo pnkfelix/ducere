@@ -1,7 +1,7 @@
 
 use crate::expr::{Expr, Var, BinOp, UnOp};
 use crate::{Grammar, Rule, RegularRightSide, NonTerm, normalize_escapes, YakkerError};
-use crate::{Lexer, Tok};
+use crate::{Tok};
 use lalrpop_util::ParseError;
 
 grammar<'a>(input: &'a str);

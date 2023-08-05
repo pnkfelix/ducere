@@ -126,7 +126,7 @@ impl StateData {
     }
 }
 
-pub struct StateBuilder(StateData);
+struct StateBuilder(StateData);
 
 impl StateBuilder {
     pub fn final_state(nt: String) -> Self {

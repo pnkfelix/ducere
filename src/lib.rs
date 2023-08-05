@@ -1,4 +1,6 @@
- #[macro_use] extern crate lalrpop_util;
+#![allow(dead_code)]
+
+#[macro_use] extern crate lalrpop_util;
 
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
@@ -41,7 +43,9 @@ mod tests;
 mod expr;
 mod node;
 
-use node::{AbstractNode, Tree};
+#[cfg(test)]
+use node::{AbstractNode};
+use node::{Tree};
 
 lalrpop_mod!(pub yakker); // synthesized by LALRPOP
 
