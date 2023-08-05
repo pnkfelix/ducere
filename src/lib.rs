@@ -96,3 +96,10 @@ impl From<char> for Term { fn from(a: char) -> Self { Self::C(a.into()) } }
 impl From<&str> for Term { fn from(a: &str) -> Self { Self::S(normalize_escapes(a.into()).unwrap()) } }
 impl From<&str> for NonTerm { fn from(a: &str) -> Self { Self(a.into()) } }
 impl From<&str> for Val { fn from(v: &str) -> Self { Self(v.into()) } }
+
+type Error<'a> = lalrpop_util::ParseError<usize, toyman::Tok<'a>, YakkerError>;
+
+pub fn parse_yakker(s: &str) -> Result<Grammar, Error<'_>> {
+    let lex = toyman::Lexer::new(s);
+    crate::yakker::GrammarParser::new().parse(s, lex)
+}
