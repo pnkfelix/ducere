@@ -3,8 +3,8 @@
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
 mod luthor;
-pub mod transducer;
-pub mod earley;
+mod transducer;
+mod earley;
 
 pub use toyman::{Lexer, Tok};
 
