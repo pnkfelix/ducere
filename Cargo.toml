@@ -15,4 +15,8 @@ regex = "1"
 derive_more = "0.99.17"
 unicode-brackets = "0.1.1"
 linear-map = "1.2.0"
+
+[dev-dependencies]
+temp-file = "0.1.7"
+thiserror = "1.0.44"
 expect-test = "1.4"
