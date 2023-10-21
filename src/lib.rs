@@ -40,6 +40,7 @@ mod specification_rules;
 
 #[cfg(test)]
 mod tests;
+mod codegen;
 mod expr;
 mod node;
 
