@@ -19,9 +19,9 @@ struct FailedCommand { stdout: Vec<u8>, stderr: Vec<u8> }
 
 impl std::fmt::Debug for FailedCommand {
     fn fmt(&self, w: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(w, r##"FailedCommand {{\n"##)?;
-        write!(w, r##"    stdout: r#"{}"#\n"##, String::from_utf8_lossy(&self.stdout))?;
-        write!(w, r##"    stderr: r#"{}"#\n"##, String::from_utf8_lossy(&self.stderr))?;
+        write!(w, r##"FailedCommand {{{}"##, "\n")?;
+        write!(w, r##"    stdout: r#"{}"#{}"##, String::from_utf8_lossy(&self.stdout), "\n")?;
+        write!(w, r##"    stderr: r#"{}"#{}"##, String::from_utf8_lossy(&self.stderr), "\n")?;
         write!(w, "}}")
     }
 }
@@ -69,7 +69,7 @@ fn main() -> Result<(), std::io::Error> {
         return Err(err);
     }
     let invoke_output = std::process::Command::new(output_path)
-        .stdin(std::fs::File::open(input_temp.path())?)
+        .stdin(fs_err::File::open(input_temp.path())?.into_parts().0)
         .output()?;
     if !invoke_output.status.success() {
         let err = CodegenTestError::invoke_fail(invoke_output.clone());
@@ -78,6 +78,55 @@ fn main() -> Result<(), std::io::Error> {
     }
     assert!(invoke_output.status.success());
     expect!("Hello World!\n").assert_eq(&String::from_utf8(invoke_output.stdout.clone())?);
+    Ok(())
+}
+
+#[test]
+fn baseline_echo_in_racket() -> Result<(), CodegenTestError> {
+    let input = r#"Hello World!"#;
+    let code = r#"
+#lang racket
+(let loop ()
+  (let ((line (read-line)))
+    (unless (eof-object? line)
+      (display line)
+      (newline)
+      (loop))))
+"#;
+    let source_temp = temp_file::TempFile::with_suffix(".rkt")?
+        .with_contents(code.as_bytes())?;
+    let input_temp = temp_file::with_contents(input.as_bytes());
+    dbg!(source_temp.path());
+    dbg!(source_temp.path().parent());
+    let sf = std::fs::File::open(source_temp.path())?;
+    dbg!(sf.metadata()?);
+    let mut contents = String::new();
+    use std::io::Read;
+    dbg!({ std::io::BufReader::new(sf).read_to_string(&mut contents)?; contents});
+    // sf.sync_all()?;
+    for (j, entry) in std::fs::read_dir(source_temp.path().parent().unwrap())?.enumerate() {
+        if let Ok(entry) = entry {
+            if entry.path().ends_with(".rkt") {
+                dbg!((j, entry));
+            }
+        }
+    }
+    let invoke_output = dbg!(std::process::Command::new(
+        // "racket"
+        "/Applications/Racket v8.10/bin/racket"
+    )
+        .arg(source_temp.path())
+        .stdin(fs_err::File::open(input_temp.path())?.into_parts().0))
+        .output()?;
+    if !invoke_output.status.success() {
+        let err = CodegenTestError::invoke_fail(invoke_output.clone());
+        println!("err: {err}");
+        return Err(err);
+    }
+    dbg!(&invoke_output);
+    assert!(invoke_output.status.success());
+    expect!("Hello World!\n").assert_eq(&String::from_utf8(invoke_output.stdout.clone())?);
+    std::mem::forget(source_temp);
     Ok(())
 }
 
@@ -116,7 +165,7 @@ class Echo {
         .arg("-cp")
         .arg(output_path.path())
         .arg("Echo")
-        .stdin(std::fs::File::open(input_temp.path())?)
+        .stdin(fs_err::File::open(input_temp.path())?.into_parts().0)
         .output()?;
     if !invoke_output.status.success() {
         let err = CodegenTestError::invoke_fail(invoke_output.clone());
